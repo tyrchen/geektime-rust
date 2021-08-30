@@ -1,0 +1,36 @@
+[package]
+name = "thumbor"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "server1"
+path = "src/server1.rs"
+
+[[bin]]
+name = "server2"
+path = "src/server2.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+axum = "0.2" # web 服务器
+anyhow = "1" # 错误处理
+base64 = "0.13" # base64 编码/解码
+bytes = "1" # 处理字节流
+image = "0.23" # 处理图片
+lazy_static = "1" # 通过宏更方便地初始化静态变量
+lru = "0.6" # LRU 缓存
+percent-encoding = "2" # url 编码/解码
+photon-rs = "0.3" # 图片效果
+prost = "0.8" # protobuf 处理
+reqwest = "0.11" # HTTP cliebnt
+serde = { version = "1", features = ["derive"] } # 序列化/反序列化数据
+tokio = { version = "1", features = ["full"] } # 异步处理
+tower = { version = "0.4", features = ["util", "timeout", "load-shed", "limit"] } # 服务处理及中间件
+tower-http = { version = "0.1", features = ["add-extension", "compression-full", "trace" ] } # http 中间件
+tracing = "0.1" # 日志和追踪
+tracing-subscriber = "0.2" # 日志和追踪
+
+[build-dependencies]
+prost-build = "0.8"

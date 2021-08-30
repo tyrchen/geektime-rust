@@ -1,0 +1,75 @@
+syntax = "proto3";
+
+package abi;
+
+// 一个 ImageSpec 是一个有序的数组，服务器按照 spec 的顺序处理
+message ImageSpec { repeated Spec specs = 1; }
+
+// 处理图片改变大小
+message Resize {
+  uint32 width = 1;
+  uint32 height = 2;
+
+  enum ResizeType {
+    NORMAL = 0;
+    SEAM_CARVE = 1;
+  }
+
+  ResizeType rtype = 3;
+
+  enum SampleFilter {
+    UNDEFINED = 0;
+    NEAREST = 1;
+    TRIANGLE = 2;
+    CATMULL_ROM = 3;
+    GAUSSIAN = 4;
+    LANCZOS3 = 5;
+  }
+
+  SampleFilter filter = 4;
+}
+
+// 处理图片截取
+message Crop {
+  uint32 x1 = 1;
+  uint32 y1 = 2;
+  uint32 x2 = 3;
+  uint32 y2 = 4;
+}
+
+// 处理水平翻转
+message Fliph {}
+// 处理垂直翻转
+message Flipv {}
+// 处理对比度
+message Contrast { float contrast = 1; }
+// 处理滤镜
+message Filter {
+  enum Filter {
+    UNSPECIFIED = 0;
+    OCEANIC = 1;
+    ISLANDS = 2;
+    MARINE = 3;
+    // more: https://docs.rs/photon-rs/0.3.1/photon_rs/filters/fn.filter.html
+  }
+  Filter filter = 1;
+}
+
+// 处理水印
+message Watermark {
+  uint32 x = 1;
+  uint32 y = 2;
+}
+
+// 一个 spec 可以包含上述的处理方式之一
+message Spec {
+  oneof data {
+    Resize resize = 1;
+    Crop crop = 2;
+    Flipv flipv = 3;
+    Fliph fliph = 4;
+    Contrast contrast = 5;
+    Filter filter = 6;
+    Watermark watermark = 7;
+  }
+}
