@@ -24,7 +24,7 @@ lru = "0.6" # LRU 缓存
 percent-encoding = "2" # url 编码/解码
 photon-rs = "0.3" # 图片效果
 prost = "0.8" # protobuf 处理
-reqwest = "0.11" # HTTP cliebnt
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] } # HTTP 客户端
 serde = { version = "1", features = ["derive"] } # 序列化/反序列化数据
 tokio = { version = "1", features = ["full"] } # 异步处理
 tower = { version = "0.4", features = ["util", "timeout", "load-shed", "limit"] } # 服务处理及中间件
