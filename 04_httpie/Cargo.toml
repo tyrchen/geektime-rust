@@ -23,3 +23,4 @@ mime = "0.3" # 处理 mime 类型
 # reqwest 默认使用 openssl，有些 linux 用户如果没有安装好 openssl 会无法编译，这里我改成了使用 rustls
 reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] } # HTTP 客户端
 tokio = { version = "1", features = ["full"] } # 异步处理库
+syntect = "4"
