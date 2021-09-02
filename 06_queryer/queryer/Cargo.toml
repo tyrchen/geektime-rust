@@ -1,0 +1,25 @@
+[package]
+name = "queryer"
+version = "0.1.0"
+edition = "2018"
+
+[[example]]
+name = "dialect"
+
+[[example]]
+name = "covid"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1" # 错误处理，其实对于库我们应该用 thiserror，但这里简单期间就不节外生枝了
+async-trait = "0.1" # 允许 trait 里有 async fn
+sqlparser = "0.10" # SQL 解析器
+polars = { version = "0.15", features = ["json", "lazy"] } # DataFrame 库
+reqwest = "0.11" # 我们的老朋友 HTTP 客户端
+tokio = { version = "1", features = ["fs"]} # 我们的老朋友异步库，我们这里需要异步文件处理
+tracing = "0.1" # 日志处理
+
+[dev-dependencies]
+tracing-subscriber = "0.2" # 日志处理
+tokio = { version = "1", features = ["full"]} # 在 example 下我们需要更多的 tokio feature
