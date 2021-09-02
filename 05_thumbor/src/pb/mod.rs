@@ -32,7 +32,7 @@ impl TryFrom<&str> for ImageSpec {
 
 // 辅助函数，photon_rs 相应的方法里需要字符串
 impl filter::Filter {
-    pub fn to_str(&self) -> Option<&'static str> {
+    pub fn to_str(self) -> Option<&'static str> {
         match self {
             filter::Filter::Unspecified => None,
             filter::Filter::Oceanic => Some("oceanic"),

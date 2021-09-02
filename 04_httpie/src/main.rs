@@ -70,7 +70,7 @@ impl FromStr for KvPair {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // 使用 = 进行 split，这会得到一个迭代器
-        let mut split = s.split("=");
+        let mut split = s.split('=');
         let err = || anyhow!(format!("Failed to parse {}", s));
         Ok(Self {
             // 从迭代器中取第一个结果作为 key，迭代器返回 Some(T)/None
@@ -84,7 +84,7 @@ impl FromStr for KvPair {
 
 /// 因为我们为 KvPair 实现了 FromStr，这里可以直接 s.parse() 得到 KvPair
 fn parse_kv_pair(s: &str) -> Result<KvPair> {
-    Ok(s.parse()?)
+    s.parse()
 }
 
 fn parse_url(s: &str) -> Result<String> {
@@ -122,11 +122,11 @@ fn print_headers(resp: &Response) {
         println!("{}: {:?}", name.to_string().green(), value);
     }
 
-    print!("\n");
+    println!();
 }
 
 /// 打印服务器返回的 HTTP body
-fn print_body(m: Option<Mime>, body: &String) {
+fn print_body(m: Option<Mime>, body: &str) {
     match m {
         // 对于 "application/json" 我们 pretty print
         Some(v) if v == mime::APPLICATION_JSON => print_syntect(body, "json"),

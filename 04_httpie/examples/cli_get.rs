@@ -60,7 +60,7 @@ impl FromStr for KvPair {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         // 使用 = 进行 split，这会得到一个迭代器
-        let mut split = s.split("=");
+        let mut split = s.split('=');
         let err = || anyhow!(format!("Failed to parse {}", s));
         Ok(Self {
             // 从迭代器中取第一个结果作为 key，迭代器返回 Some(T)/None
@@ -74,7 +74,7 @@ impl FromStr for KvPair {
 
 /// 因为我们为 KvPair 实现了 FromStr，这里可以直接 s.parse() 得到 KvPair
 fn parse_kv_pair(s: &str) -> Result<KvPair> {
-    Ok(s.parse()?)
+    s.parse()
 }
 fn parse_url(s: &str) -> Result<String> {
     // 这里我们仅仅检查一下 URL 是否合法

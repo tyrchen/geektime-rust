@@ -17,7 +17,7 @@ pub async fn retrieve_data(source: impl AsRef<str>) -> Result<String> {
         "http" => UrlFetcher(name).fetch().await,
         // 处理 file://<filename>
         "file" => FileFetcher(name).fetch().await,
-        _ => return Err(anyhow!("We only support http/https/file at the moment")),
+        _ => Err(anyhow!("We only support http/https/file at the moment")),
     }
 }
 

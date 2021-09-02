@@ -1,0 +1,14 @@
+[workspace]
+
+members = [
+  "02_concepts",
+  "03_grammar/scrape_url",
+  "03_grammar/scrape_url_args",
+  "03_grammar/scrape_url_with_error_handling",
+  "04_httpie",
+  "05_thumbor",
+  "06_queryer/queryer",
+  "06_queryer/queryer-js",
+  "06_queryer/queryer-py",
+  "06_queryer/data-viewer/src-tauri",
+]

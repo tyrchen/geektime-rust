@@ -82,7 +82,7 @@ async fn generate(
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 
     let url: &str = &percent_decode_str(&url).decode_utf8_lossy();
-    let data = retrieve_image(&url, cache)
+    let data = retrieve_image(url, cache)
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
 

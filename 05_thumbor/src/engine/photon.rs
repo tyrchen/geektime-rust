@@ -91,14 +91,12 @@ impl SpecTransform<&Resize> for Photon {
     fn transform(&mut self, op: &Resize) {
         let img = match resize::ResizeType::from_i32(op.rtype).unwrap() {
             resize::ResizeType::Normal => transform::resize(
-                &mut self.0,
+                &self.0,
                 op.width,
                 op.height,
                 resize::SampleFilter::from_i32(op.filter).unwrap().into(),
             ),
-            resize::ResizeType::SeamCarve => {
-                transform::seam_carve(&mut self.0, op.width, op.height)
-            }
+            resize::ResizeType::SeamCarve => transform::seam_carve(&self.0, op.width, op.height),
         };
         self.0 = img;
     }

@@ -1,4 +1,4 @@
-const PI: f64 = 3.1415926;
+const MY_PI: f64 = std::f64::consts::PI;
 
 struct Rectangle {
     a: f64,
@@ -44,7 +44,7 @@ impl Area for Rectangle {
 
 impl Area for Circle {
     fn area(&self) -> f64 {
-        self.r * self.r * PI
+        self.r * self.r * MY_PI
     }
 }
 

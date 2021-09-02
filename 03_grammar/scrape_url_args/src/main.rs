@@ -5,7 +5,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     let args = std::env::args().skip(1).collect::<Vec<_>>();
 
-    if args.len() == 0 {
+    if args.is_empty() {
         println!("Usage: scrape_url_args <url> <output file>");
         std::process::exit(1);
     }

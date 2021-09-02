@@ -167,7 +167,7 @@ impl<'a> TryFrom<Source<'a>> for &'a str {
 
         match &table.relation {
             TableFactor::Table { name, .. } => Ok(&name.0.first().unwrap().value),
-            _ => return Err(anyhow!("We only support table")),
+            _ => Err(anyhow!("We only support table")),
         }
     }
 }
