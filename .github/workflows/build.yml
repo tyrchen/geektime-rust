@@ -44,6 +44,6 @@ jobs:
       - name: Lint rust sources
         run: cargo clippy --all-targets --all-features --tests --benches -- -D warnings
       - name: Run tests
-        run: RUST_BACKTRACE=1 cargo test --all-features -- --test-threads=1 --nocapture
+        run: cargo test --all-features -- --test-threads=1 --nocapture
       - name: Generate docs
         run: cargo doc --all-features --no-deps
