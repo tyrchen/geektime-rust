@@ -10,5 +10,4 @@ members = [
   "06_queryer/queryer",
   "06_queryer/queryer-js",
   "06_queryer/queryer-py",
-  "06_queryer/data-viewer/src-tauri",
 ]
