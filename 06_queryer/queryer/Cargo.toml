@@ -16,7 +16,7 @@ anyhow = "1" # 错误处理，其实对于库我们应该用 thiserror，但这�
 async-trait = "0.1" # 允许 trait 里有 async fn
 sqlparser = "0.10" # SQL 解析器
 polars = { version = "0.15", features = ["json", "lazy"] } # DataFrame 库
-reqwest = "0.11" # 我们的老朋友 HTTP 客户端
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls"] } # 我们的老朋友 HTTP 客户端
 tokio = { version = "1", features = ["fs"]} # 我们的老朋友异步库，我们这里需要异步文件处理
 tracing = "0.1" # 日志处理
 
