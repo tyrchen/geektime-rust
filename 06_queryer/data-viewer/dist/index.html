@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Document</title>
+    <script>
+      const invoke = window.__TAURI__.invoke;
+      let sqlElm, runBtn, resultElm;
+
+      async function init() {
+        sqlElm = document.getElementById("sql");
+        runBtn = document.getElementById("run");
+        resultElm = document.getElementById("result");
+
+        runBtn.onclick = async () => {
+          const sql = sqlElm.value;
+          const result = await invoke("query", { sql });
+          resultElm.innerHTML = result;
+        };
+
+        const sqlText = await invoke("example_sql");
+        sqlElm.value = sqlText;
+      }
+
+      window.addEventListener("DOMContentLoaded", init);
+    </script>
+  </head>
+  <body>
+    <h1>data-viewer</h1>
+    <textarea id="sql" rows="3" cols="80"></textarea>
+    <button id="run">Query</button>
+    <pre id="result"></pre>
+  </body>
+</html>
