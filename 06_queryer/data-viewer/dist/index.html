@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <style>
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    body {
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+    }
+
+    textarea {
+      font-size: 14px;
+    }
+
+    input {
+      font-size: 24px;
+    }
+
+    #container {
+      display: block;
+      font-size: 16px;
+      padding: 10px;
+    }
+    h1 {
+      display: block;
+      color: #1864ab;
+    }
+  </style>
+  <body>
+    <h1>data-viewer</h1>
+    <div>
+      <textarea id="input" placeholder="请输入 SQL" style="width: 600px; height: 50px"></textarea>
+      <input type="button" value="Query" id="execute" />
+    </div>
+
+    <div id="container"></div>
+  </body>
+
+  <script language="JavaScript">
+    const invoke = window.__TAURI__.invoke;
+    const elSql = document.getElementById("input");
+    const elBtn = document.getElementById("execute");
+
+    invoke('example_sql')
+      .then(sql => elSql.value = sql);
+
+    elBtn.addEventListener("click", _ => {
+      const sql = elSql.value;
+      invoke('query', { sql })
+      .then(data => {
+        const container = document.getElementById('container');
+        container.innerHTML = `<pre>${data}</pre>`;
+      })
+      .catch(e => alert(e));
+    });
+
+  </script>
+</html>
