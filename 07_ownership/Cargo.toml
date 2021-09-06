@@ -15,30 +15,6 @@ path = "src/ownership_error.rs"
 name = "check_copy"
 path = "src/check_copy.rs"
 
-[[bin]]
-name = "ownership_reference"
-path = "src/ownership_reference.rs"
-
-[[bin]]
-name = "outlive"
-path = "src/outlive.rs"
-
-[[bin]]
-name = "outlive_heap"
-path = "src/outlive_heap.rs"
-
-[[bin]]
-name = "outlive_heap1"
-path = "src/outlive_heap1.rs"
-
-[[bin]]
-name = "multiple_mut_ref"
-path = "src/multiple_mut_ref.rs"
-
-[[bin]]
-name = "multiple_mut_ref1"
-path = "src/multiple_mut_ref1.rs"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
