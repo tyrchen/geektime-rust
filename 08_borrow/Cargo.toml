@@ -27,6 +27,10 @@ path = "src/multiple_mut_ref.rs"
 name = "multiple_mut_ref1"
 path = "src/multiple_mut_ref1.rs"
 
+[[bin]]
+name = "manual_drop"
+path = "src/manual_drop.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
