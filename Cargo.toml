@@ -12,4 +12,5 @@ members = [
   "06_queryer/queryer-py",
   "07_ownership",
   "08_borrow",
+  "09_multi_owner",
 ]

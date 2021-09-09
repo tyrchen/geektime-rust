@@ -31,6 +31,18 @@ path = "src/multiple_mut_ref1.rs"
 name = "manual_drop"
 path = "src/manual_drop.rs"
 
+[[bin]]
+name = "vec_grow"
+path = "src/vec_grow.rs"
+
+[[bin]]
+name = "reborrow"
+path = "src/reborrow.rs"
+
+[[bin]]
+name = "reborrow1"
+path = "src/reborrow1.rs"
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]

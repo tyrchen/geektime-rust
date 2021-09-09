@@ -1,0 +1,20 @@
+[package]
+name = "multi_owner"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "dag"
+path = "src/dag.rs"
+
+[[bin]]
+name = "refcell"
+path = "src/refcell.rs"
+
+[[bin]]
+name = "dag_mut"
+path = "src/dag_mut.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
