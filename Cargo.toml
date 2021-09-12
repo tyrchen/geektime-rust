@@ -13,4 +13,5 @@ members = [
   "07_ownership",
   "08_borrow",
   "09_multi_owner",
+  "10_lifetime",
 ]

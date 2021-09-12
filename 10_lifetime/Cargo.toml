@@ -1,0 +1,38 @@
+[package]
+name = "lifetime"
+version = "0.1.0"
+edition = "2018"
+
+# 如果尝试编译 lifetime 会因为生命周期出错
+# [[bin]]
+# name = "lifetime"
+# path = "src/lifetime.rs"
+
+[[bin]]
+name = "lifetime1"
+path = "src/lifetime1.rs"
+
+# 如果尝试编译 lifetime2 会因为生命周期出错
+# [[bin]]
+# name = "lifetime2"
+# path = "src/lifetime2.rs"
+
+[[bin]]
+name = "lifetime3"
+path = "src/lifetime3.rs"
+
+[[bin]]
+name = "lifetime4"
+path = "src/lifetime4.rs"
+
+[[bin]]
+name = "lifetime_non_lexical"
+path = "src/lifetime_non_lexical.rs"
+
+[[bin]]
+name = "strtok"
+path = "src/strtok.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
