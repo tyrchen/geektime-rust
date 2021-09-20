@@ -16,4 +16,5 @@ members = [
   "10_lifetime",
   "11_memory",
   "12_type_system",
+  "13_traits",
 ]
