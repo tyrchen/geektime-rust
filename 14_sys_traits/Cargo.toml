@@ -1,0 +1,40 @@
+[package]
+name = "sys_traits"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "dev"
+path = "src/dev.rs"
+
+[[bin]]
+name = "copy_drop"
+path = "src/copy_drop.rs"
+
+[[bin]]
+name = "sized"
+path = "src/sized.rs"
+
+[[bin]]
+name = "send_sync"
+path = "src/send_sync.rs"
+
+[[bin]]
+name = "convert"
+path = "src/convert.rs"
+
+[[bin]]
+name = "deref"
+path = "src/deref.rs"
+
+[[bin]]
+name = "default"
+path = "src/default.rs"
+
+[[bin]]
+name = "linked_list"
+path = "src/linked_list.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
