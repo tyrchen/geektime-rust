@@ -1,0 +1,45 @@
+[package]
+name = "data-structure"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "type_name"
+path = "src/type_name.rs"
+
+[[bin]]
+name = "slice1"
+path = "src/slice1.rs"
+
+[[bin]]
+name = "slice2"
+path = "src/slice2.rs"
+
+[[bin]]
+name = "slice3"
+path = "src/slice3.rs"
+
+[[bin]]
+name = "slice4"
+path = "src/slice4.rs"
+
+[[bin]]
+name = "slice5"
+path = "src/slice5.rs"
+
+[[bin]]
+name = "boxed"
+path = "src/boxed.rs"
+
+[[bin]]
+name = "iter"
+path = "src/iter.rs"
+
+[[bin]]
+name = "iter_ext"
+path = "src/iter_ext.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+itertools = "0.10"

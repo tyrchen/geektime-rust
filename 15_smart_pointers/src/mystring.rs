@@ -141,7 +141,7 @@ fn main() {
 
     // MyString 可以使用一切 &str 接口，感谢 Rust 的自动 Deref
     assert!(s1.ends_with("world"));
-    assert!(s2.starts_with("这"));
+    assert!(s2.starts_with('这'));
 
     let s = String::from("这是一个超过了三十个字节的很长很长的字符串");
     println!("s: {:p}", &*s);
