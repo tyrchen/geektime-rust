@@ -18,4 +18,5 @@ members = [
   "12_type_system",
   "13_traits",
   "14_sys_traits",
+  "15_smart_pointers",
 ]
