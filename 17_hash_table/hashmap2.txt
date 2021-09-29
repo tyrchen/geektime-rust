@@ -1,0 +1,61 @@
+❯ rust-gdb ~/.target/debug/hashmap2
+GNU gdb (Ubuntu 9.2-0ubuntu2) 9.2
+...
+(gdb) b hashmap2.rs:32
+Breakpoint 1 at 0xa43e: file src/hashmap2.rs, line 32.
+(gdb) r
+Starting program: /home/tchen/.target/debug/hashmap2
+...
+# 最初的状态，哈希表为空
+empty: bucket_mask 0x0, ctrl 0x555555597be0, growth_left: 0, items: 0
+
+Breakpoint 1, hashmap2::explain (name=..., map=...) at src/hashmap2.rs:32
+32	    unsafe { std::mem::transmute(arr) }
+(gdb) c
+Continuing.
+# 插入了一个元素后，bucket 有 4 个（0x3+1），堆地址起始位置 0x5555555a7af0 - 4*8(0x20)
+added 1: bucket_mask 0x3, ctrl 0x5555555a7af0, growth_left: 2, items: 1
+
+Breakpoint 1, hashmap2::explain (name=..., map=...) at src/hashmap2.rs:32
+32	    unsafe { std::mem::transmute(arr) }
+(gdb) x /12x 0x5555555a7ad0
+0x5555555a7ad0:	0x00000061	0x00000001	0x00000000	0x00000000
+0x5555555a7ae0:	0x00000000	0x00000000	0x00000000	0x00000000
+0x5555555a7af0:	0x0affffff	0xffffffff	0xffffffff	0xffffffff
+(gdb) c
+Continuing.
+# 插入了三个元素后，哈希表没有剩余空间，堆地址起始位置不变 0x5555555a7af0 - 4*8(0x20)
+added 3: bucket_mask 0x3, ctrl 0x5555555a7af0, growth_left: 0, items: 3
+
+Breakpoint 1, hashmap2::explain (name=..., map=...) at src/hashmap2.rs:32
+32	    unsafe { std::mem::transmute(arr) }
+(gdb) x /12x 0x5555555a7ad0
+0x5555555a7ad0:	0x00000061	0x00000001	0x00000062	0x00000002
+0x5555555a7ae0:	0x00000000	0x00000000	0x00000063	0x00000003
+0x5555555a7af0:	0x0a72ff02	0xffffffff	0xffffffff	0xffffffff
+(gdb) c
+Continuing.
+# 插入第四个元素后，哈希表扩容，堆地址起始位置变为 0x5555555a7b50 - 8*8(0x40)
+added 4: bucket_mask 0x7, ctrl 0x5555555a7b50, growth_left: 3, items: 4
+
+Breakpoint 1, hashmap2::explain (name=..., map=...) at src/hashmap2.rs:32
+32	    unsafe { std::mem::transmute(arr) }
+(gdb) x /20x 0x5555555a7b10
+0x5555555a7b10:	0x00000061	0x00000001	0x00000000	0x00000000
+0x5555555a7b20:	0x00000064	0x00000004	0x00000063	0x00000003
+0x5555555a7b30:	0x00000000	0x00000000	0x00000062	0x00000002
+0x5555555a7b40:	0x00000000	0x00000000	0x00000000	0x00000000
+0x5555555a7b50:	0xff72ffff	0x0aff6502	0xffffffff	0xffffffff
+(gdb) c
+Continuing.
+# 删除 a 后，剩余 4 个位置。注意 ctrl bit 的变化，以及 0x61 0x1 并没有被清除
+final: bucket_mask 0x7, ctrl 0x5555555a7b50, growth_left: 4, items: 3
+
+Breakpoint 1, hashmap2::explain (name=..., map=...) at src/hashmap2.rs:32
+32	    unsafe { std::mem::transmute(arr) }
+(gdb) x /20x 0x5555555a7b10
+0x5555555a7b10:	0x00000061	0x00000001	0x00000000	0x00000000
+0x5555555a7b20:	0x00000064	0x00000004	0x00000063	0x00000003
+0x5555555a7b30:	0x00000000	0x00000000	0x00000062	0x00000002
+0x5555555a7b40:	0x00000000	0x00000000	0x00000000	0x00000000
+0x5555555a7b50:	0xff72ffff	0xffff6502	0xffffffff	0xffffffff

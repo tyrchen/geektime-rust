@@ -1,0 +1,32 @@
+[package]
+name = "hashtable"
+version = "0.1.0"
+edition = "2018"
+
+[[bin]]
+name = "hashmap1"
+path = "src/hashmap1.rs"
+
+[[bin]]
+name = "hashmap2"
+path = "src/hashmap2.rs"
+
+[[bin]]
+name = "hash"
+path = "src/hash.rs"
+
+[[bin]]
+name = "siphasher"
+path = "src/siphasher.rs"
+
+[[bin]]
+name = "hashmap3"
+path = "src/hashmap3.rs"
+
+[[bin]]
+name = "btreemap1"
+path = "src/btreemap1.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
