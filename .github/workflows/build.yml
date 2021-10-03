@@ -29,7 +29,7 @@ jobs:
       - name: Cache cargo build
         uses: actions/cache@v1
         with:
-          path: rust/target
+          path: target
           key: ${{ runner.os }}-cargo-build-target
       - name: Install stable
         uses: actions-rs/toolchain@v1
