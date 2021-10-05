@@ -1,0 +1,34 @@
+(gdb) info locals
+c5 = closure_size::main::closure-4 ("tyr")
+name2 = "tyr"
+c4 = closure_size::main::closure-3 ("tyr", HashMap(size=1) = {["hello"] = "world"})
+c3 = closure_size::main::closure-2 (0x7fffffffd998)
+table = HashMap(size=1) = {["hello"] = "world"}
+name1 = "tyr"
+name = "tyr"
+c2 = closure_size::main::closure-1
+c1 = closure_size::main::closure-0
+(gdb) x/gx &c3
+0x7fffffffd9f8:	0x00007fffffffd998
+(gdb) x/3gx 0x00007fffffffd998
+0x7fffffffd998:	0x00005555555a9ba0	0x0000000000000003
+0x7fffffffd9a8:	0x0000000000000003
+(gdb) x/3c 0x00005555555a9ba0
+0x5555555a9ba0:	116 't'	121 'y'	114 'r'
+(gdb) x/18gx &c4
+0x7fffffffda00:	0x00005555555a9bc0	0x0000000000000003
+0x7fffffffda10:	0x0000000000000003	0xb421d4064b548fd0
+0x7fffffffda20:	0xca71308aa8535935	0x0000000000000003
+0x7fffffffda30:	0x00005555555a9ac0	0x0000000000000002
+0x7fffffffda40:	0x0000000000000001	0x00005555555a9c10
+0x7fffffffda50:	0x0000000000000003	0x0000000000000003
+0x7fffffffda60:	0x00005555555a9c10	0x0000000000000003
+0x7fffffffda70:	0x0000000000000003	0x0000003200000003
+0x7fffffffda80:	0x0000000000000020	0x0000000000000003
+(gdb) x/3c 0x00005555555a9bc0
+0x5555555a9bc0:	116 't'	121 'y'	114 'r'
+(gdb) x/3gx &c5
+0x7fffffffda60:	0x00005555555a9c10	0x0000000000000003
+0x7fffffffda70:	0x0000000000000003
+(gdb) x/3c 0x00005555555a9c10
+0x5555555a9c10:	116 't'	121 'y'	114 'r'

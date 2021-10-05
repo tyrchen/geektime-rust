@@ -1,0 +1,10 @@
+(gdb) info locals
+c = closure_size1::main::closure-0 (1, &[&str] {data_ptr: 0x55555559fbc0, length: 3}, "Tyr")
+i = 1
+v = &[&str] {data_ptr: 0x55555559fbc0, length: 3}
+data = Vec(size=3) = {"Rust", "Elixir", "Javascript"}
+name = "Tyr"
+(gdb) x/6gx &c
+0x7fffffffdae0:	0x000055555559fbc0	0x0000000000000003
+0x7fffffffdaf0:	0x000055555559fba0	0x0000000000000003
+0x7fffffffdb00:	0x0000000000000003	0x00007ffff7d85c01

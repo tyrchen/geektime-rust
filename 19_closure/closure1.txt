@@ -1,0 +1,14 @@
+(gdb) info locals
+c4 = closure_size::main::closure-3 (HashMap(size=1) = {["hello"] = "world"}, "tyr")
+c3 = closure_size::main::closure-2 (0x7fffffffd9f8)
+table = HashMap(size=1) = {["hello"] = "world"}
+name1 = "tyr"
+name = "tyr"
+c2 = closure_size::main::closure-1
+c1 = closure_size::main::closure-0
+(gdb) x/9gx &c4
+0x7fffffffda60:	0x105fdc00347211ef	0x7acdd5d4ffd8bb08
+0x7fffffffda70:	0x0000000000000003	0x00005555555a9ac0
+0x7fffffffda80:	0x0000000000000002	0x0000000000000001
+0x7fffffffda90:	0x00005555555a9bc0	0x0000000000000003
+0x7fffffffdaa0:	0x0000000000000003

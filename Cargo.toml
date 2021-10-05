@@ -21,4 +21,5 @@ members = [
   "15_smart_pointers",
   "16_data_structure",
   "17_hash_table",
+  "19_closure",
 ]
