@@ -23,4 +23,5 @@ members = [
   "17_hash_table",
   "19_closure",
   "21_kv",
+  "mid_term_rgrep",
 ]
