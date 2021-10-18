@@ -1,4 +1,4 @@
-use clap::{AppSettings, Clap};
+use clap::Parser;
 use colored::*;
 use itertools::Itertools;
 use rayon::iter::{IntoParallelIterator, ParallelIterator};
@@ -17,9 +17,8 @@ pub use error::GrepError;
 pub type StrategyFn<W, R> = fn(&Path, BufReader<R>, &Regex, &mut W) -> Result<(), GrepError>;
 
 /// 简化版本的 grep，支持正则表达式和文件通配符
-#[derive(Clap, Debug)]
+#[derive(Parser, Debug)]
 #[clap(version = "1.0", author = "Tyr Chen <tyr@chen.com>")]
-#[clap(setting = AppSettings::ColoredHelp)]
 pub struct GrepConfig {
     /// 用于查找的正则表达式
     pattern: String,
