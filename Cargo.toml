@@ -24,5 +24,6 @@ members = [
   "19_closure",
   "21_kv",
   "mid_term_rgrep",
-  "23_advanced_generics"
+  "23_advanced_generics",
+  "24_advanced_trait_objects",
 ]
