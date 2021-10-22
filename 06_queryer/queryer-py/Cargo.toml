@@ -1,7 +1,7 @@
 [package]
 name = "queryer_py" # Python 模块需要用下划线
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 
 [lib]
