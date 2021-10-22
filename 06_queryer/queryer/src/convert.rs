@@ -4,7 +4,6 @@ use sqlparser::ast::{
     BinaryOperator as SqlBinaryOperator, Expr as SqlExpr, Offset as SqlOffset, OrderByExpr, Select,
     SelectItem, SetExpr, Statement, TableFactor, TableWithJoins, Value as SqlValue,
 };
-use std::convert::{TryFrom, TryInto};
 
 /// 解析出来的 SQL
 pub struct Sql<'a> {
@@ -232,7 +231,6 @@ mod tests {
     use super::*;
     use crate::TyrDialect;
     use sqlparser::parser::Parser;
-    use std::convert::TryInto;
 
     #[test]
     fn parse_sql_works() {

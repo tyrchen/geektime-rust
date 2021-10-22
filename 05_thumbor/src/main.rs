@@ -12,7 +12,6 @@ use percent_encoding::{percent_decode_str, percent_encode, NON_ALPHANUMERIC};
 use serde::Deserialize;
 use std::{
     collections::hash_map::DefaultHasher,
-    convert::TryInto,
     hash::{Hash, Hasher},
     sync::Arc,
     time::Duration,

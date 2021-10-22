@@ -1,7 +1,7 @@
 [package]
 name = "kv"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 bytes = "1" # 高效处理网络 buffer 的库
