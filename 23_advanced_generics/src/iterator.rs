@@ -32,7 +32,7 @@ impl Iterator for Equation<Quadratic> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.current += 1;
-        if self.current == u32::MAX {
+        if self.current >= u16::MAX as u32 {
             return None;
         }
 
