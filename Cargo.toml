@@ -27,4 +27,5 @@ members = [
   "23_advanced_generics",
   "24_advanced_trait_objects",
   "26_kv",
+  "29_network",
 ]
