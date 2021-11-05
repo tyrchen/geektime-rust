@@ -28,4 +28,5 @@ members = [
   "24_advanced_trait_objects",
   "26_kv",
   "29_network",
+  "30_unsafe",
 ]
