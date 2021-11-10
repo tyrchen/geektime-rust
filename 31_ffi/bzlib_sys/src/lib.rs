@@ -7,6 +7,7 @@
 use anyhow::{anyhow, Result};
 use std::mem;
 
+#[allow(clippy::all)]
 mod bindings;
 
 pub use bindings::*;
