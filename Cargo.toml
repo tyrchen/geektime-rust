@@ -29,7 +29,6 @@ members = [
   "26_kv",
   "29_network",
   "30_unsafe",
-  "31_ffi/bzlib_sys",
   "31_ffi/ffi",
   "31_ffi/ffi_math",
   "32_xunmi_py"
