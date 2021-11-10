@@ -1,0 +1,4 @@
+namespace math {
+    u32 add(u32 a, u32 b);
+    string hello([ByRef]string name);
+};

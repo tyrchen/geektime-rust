@@ -1,0 +1,14 @@
+[package]
+name = "ffi-math"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+uniffi = "0.14"
+uniffi_macros = "0.14"
+
+[build-dependencies]
+uniffi_build = {version = "0.14", features = [ "builtin-bindgen" ]}

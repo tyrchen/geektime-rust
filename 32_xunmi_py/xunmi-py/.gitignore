@@ -1,0 +1,6 @@
+.env
+target
+.ipynb_*
+__pycache__
+.pytest_cache
+*.so
