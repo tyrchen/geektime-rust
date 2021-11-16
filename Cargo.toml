@@ -31,5 +31,7 @@ members = [
   "30_unsafe",
   "31_ffi/ffi",
   "31_ffi/ffi_math",
-  "32_xunmi_py"
+  "32_xunmi_py",
+  "33_concurrency",
+  "35_con_utils",
 ]
