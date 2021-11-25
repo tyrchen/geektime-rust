@@ -35,4 +35,6 @@ members = [
   "33_concurrency",
   "35_con_utils",
   "36_kv",
+  "37_kv",
+  "38_async",
 ]

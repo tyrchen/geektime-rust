@@ -1,0 +1,17 @@
+[package]
+name = "asynchronous"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dev-dependencies]
+anyhow = "1"
+blake3 = "1"
+futures = "0.3"
+rayon = "1"
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.8"
+tokio = { version = "1", features = ["full"] }
+tokio-util = {version = "0.6", features = ["codec"] }
+toml = "0.5"
