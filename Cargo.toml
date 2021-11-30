@@ -38,4 +38,5 @@ members = [
   "37_kv",
   "38_async",
   "39_async_internals",
+  "40_async_stream",
 ]
