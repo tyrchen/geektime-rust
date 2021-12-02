@@ -1,0 +1,346 @@
+diff --git a/39/kv/src/client.rs b/39/kv/src/client.rs
+index df6f41f..f8d1c40 100644
+--- a/39/kv/src/client.rs
++++ b/39/kv/src/client.rs
+@@ -1,6 +1,10 @@
++use std::time::Duration;
++
+ use anyhow::Result;
+-use kv5::{CommandRequest, ProstClientStream, TlsClientConnector, YamuxCtrl};
+-use tokio::net::TcpStream;
++use futures::StreamExt;
++use kv5::{CommandRequest, KvError, ProstClientStream, TlsClientConnector, YamuxCtrl};
++use tokio::{net::TcpStream, time};
++use tokio_util::compat::Compat;
+ use tracing::info;
+
+ #[tokio::main]
+@@ -18,6 +22,10 @@ async fn main() -> Result<()> {
+
+     // 打开一个 stream
+     let mut ctrl = YamuxCtrl::new_client(stream, None);
++
++    let channel = "lobby";
++    start_publishing(ctrl.open_stream().await?, channel)?;
++
+     let stream = ctrl.open_stream().await?;
+
+     let mut client = ProstClientStream::new(stream);
+@@ -26,8 +34,44 @@ async fn main() -> Result<()> {
+     let cmd = CommandRequest::new_hset("table1", "hello", "world".to_string().into());
+
+     // 发送 HSET 命令
+-    let data = client.execute(cmd).await?;
++    let data = client.execute_unary(&cmd).await?;
+     info!("Got response {:?}", data);
+
++    // 生成一个 Subscribe 命令
++    let cmd = CommandRequest::new_subscribe(channel);
++    let mut stream = client.execute_streaming(&cmd).await?;
++    let id = stream.id;
++    start_unsubscribe(ctrl.open_stream().await?, channel, id)?;
++
++    while let Some(Ok(data)) = stream.next().await {
++        println!("Got published data: {:?}", data);
++    }
++
++    println!("Done!");
++
++    Ok(())
++}
++
++fn start_publishing(stream: Compat<yamux::Stream>, name: &str) -> Result<(), KvError> {
++    let cmd = CommandRequest::new_publish(name, vec![1.into(), 2.into(), "hello".into()]);
++    tokio::spawn(async move {
++        time::sleep(Duration::from_millis(1000)).await;
++        let mut client = ProstClientStream::new(stream);
++        let res = client.execute_unary(&cmd).await.unwrap();
++        println!("Finished publishing: {:?}", res);
++    });
++
++    Ok(())
++}
++
++fn start_unsubscribe(stream: Compat<yamux::Stream>, name: &str, id: u32) -> Result<(), KvError> {
++    let cmd = CommandRequest::new_unsubscribe(name, id as _);
++    tokio::spawn(async move {
++        time::sleep(Duration::from_millis(2000)).await;
++        let mut client = ProstClientStream::new(stream);
++        let res = client.execute_unary(&cmd).await.unwrap();
++        println!("Finished unsubscribing: {:?}", res);
++    });
++
+     Ok(())
+ }
+diff --git a/39/kv/src/network/mod.rs b/39/kv/src/network/mod.rs
+index 554e9b5..6c3c63f 100644
+--- a/39/kv/src/network/mod.rs
++++ b/39/kv/src/network/mod.rs
+@@ -1,19 +1,20 @@
+ mod frame;
+ mod multiplex;
+ mod stream;
++mod stream_result;
+ mod tls;
+
+ pub use frame::{read_frame, FrameCoder};
+-use futures::{SinkExt, StreamExt};
+ pub use multiplex::YamuxCtrl;
+ pub use stream::ProstStream;
++pub use stream_result::StreamResult;
+ pub use tls::{TlsClientConnector, TlsServerAcceptor};
+
++use crate::{CommandRequest, CommandResponse, KvError, Service};
++use futures::{SinkExt, StreamExt};
+ use tokio::io::{AsyncRead, AsyncWrite};
+ use tracing::info;
+
+-use crate::{CommandRequest, CommandResponse, KvError, Service};
+-
+ /// 处理服务器端的某个 accept 下来的 socket 的读写
+ pub struct ProstServerStream<S> {
+     inner: ProstStream<S, CommandRequest, CommandResponse>,
+@@ -27,7 +28,7 @@ pub struct ProstClientStream<S> {
+
+ impl<S> ProstServerStream<S>
+ where
+-    S: AsyncRead + AsyncWrite + Unpin + Send,
++    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+ {
+     pub fn new(stream: S, service: Service) -> Self {
+         Self {
+@@ -52,7 +53,7 @@ where
+
+ impl<S> ProstClientStream<S>
+ where
+-    S: AsyncRead + AsyncWrite + Unpin + Send,
++    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+ {
+     pub fn new(stream: S) -> Self {
+         Self {
+@@ -60,15 +61,27 @@ where
+         }
+     }
+
+-    pub async fn execute(&mut self, cmd: CommandRequest) -> Result<CommandResponse, KvError> {
++    pub async fn execute_unary(
++        &mut self,
++        cmd: &CommandRequest,
++    ) -> Result<CommandResponse, KvError> {
+         let stream = &mut self.inner;
+-        stream.send(&cmd).await?;
++        stream.send(cmd).await?;
+
+         match stream.next().await {
+             Some(v) => v,
+             None => Err(KvError::Internal("Didn't get any response".into())),
+         }
+     }
++
++    pub async fn execute_streaming(self, cmd: &CommandRequest) -> Result<StreamResult, KvError> {
++        let mut stream = self.inner;
++
++        stream.send(cmd).await?;
++        stream.close().await?;
++
++        StreamResult::new(stream).await
++    }
+ }
+
+ #[cfg(test)]
+@@ -143,18 +156,24 @@ mod tests {
+         // 发送 HSET，等待回应
+
+         let cmd = CommandRequest::new_hset("t1", "k1", "v1".into());
+-        let res = client.execute(cmd).await.unwrap();
++        let res = client.execute_unary(&cmd).await.unwrap();
+
+         // 第一次 HSET 服务器应该返回 None
+         assert_res_ok(&res, &[Value::default()], &[]);
+
+         // 再发一个 HSET
+         let cmd = CommandRequest::new_hget("t1", "k1");
+-        let res = client.execute(cmd).await?;
++        let res = client.execute_unary(&cmd).await?;
+
+         // 服务器应该返回上一次的结果
+         assert_res_ok(&res, &["v1".into()], &[]);
+
++        // 发一个 SUBSCRIBE
++        let cmd = CommandRequest::new_subscribe("chat");
++        let res = client.execute_streaming(&cmd).await?;
++        let id = res.id;
++        assert!(id > 0);
++
+         Ok(())
+     }
+
+@@ -167,12 +186,12 @@ mod tests {
+
+         let v: Value = Bytes::from(vec![0u8; 16384]).into();
+         let cmd = CommandRequest::new_hset("t2", "k2", v.clone().into());
+-        let res = client.execute(cmd).await?;
++        let res = client.execute_unary(&cmd).await?;
+
+         assert_res_ok(&res, &[Value::default()], &[]);
+
+         let cmd = CommandRequest::new_hget("t2", "k2");
+-        let res = client.execute(cmd).await?;
++        let res = client.execute_unary(&cmd).await?;
+
+         assert_res_ok(&res, &[v.into()], &[]);
+
+diff --git a/39/kv/src/network/multiplex.rs b/39/kv/src/network/multiplex.rs
+index d698115..0dc72e2 100644
+--- a/39/kv/src/network/multiplex.rs
++++ b/39/kv/src/network/multiplex.rs
+@@ -167,10 +167,10 @@ mod tests {
+         let mut client = ProstClientStream::new(stream);
+
+         let cmd = CommandRequest::new_hset("t1", "k1", "v1".into());
+-        client.execute(cmd).await.unwrap();
++        client.execute_unary(&cmd).await.unwrap();
+
+         let cmd = CommandRequest::new_hget("t1", "k1");
+-        let res = client.execute(cmd).await.unwrap();
++        let res = client.execute_unary(&cmd).await.unwrap();
+         assert_res_ok(&res, &["v1".into()], &[]);
+
+         Ok(())
+diff --git a/39/kv/src/network/stream_result.rs b/39/kv/src/network/stream_result.rs
+new file mode 100644
+index 0000000..df565d1
+--- /dev/null
++++ b/39/kv/src/network/stream_result.rs
+@@ -0,0 +1,56 @@
++use std::{
++    convert::TryInto,
++    ops::{Deref, DerefMut},
++    pin::Pin,
++};
++
++use futures::{Stream, StreamExt};
++
++use crate::{CommandResponse, KvError};
++
++/// 创建时之间取得 subscription id，并使用 Deref/DerefMut 使其用起来和 Stream 一致
++pub struct StreamResult {
++    pub id: u32,
++    inner: Pin<Box<dyn Stream<Item = Result<CommandResponse, KvError>> + Send>>,
++}
++
++impl StreamResult {
++    pub async fn new<T>(mut stream: T) -> Result<Self, KvError>
++    where
++        T: Stream<Item = Result<CommandResponse, KvError>> + Send + Unpin + 'static,
++    {
++        let id = match stream.next().await {
++            Some(Ok(CommandResponse {
++                status: 200,
++                values: v,
++                ..
++            })) => {
++                if v.is_empty() {
++                    return Err(KvError::Internal("Invalid stream".into()));
++                }
++                let id: i64 = (&v[0]).try_into().unwrap();
++                Ok(id as u32)
++            }
++            _ => Err(KvError::Internal("Invalid stream".into())),
++        };
++
++        Ok(StreamResult {
++            inner: Box::pin(stream),
++            id: id?,
++        })
++    }
++}
++
++impl Deref for StreamResult {
++    type Target = Pin<Box<dyn Stream<Item = Result<CommandResponse, KvError>> + Send>>;
++
++    fn deref(&self) -> &Self::Target {
++        &self.inner
++    }
++}
++
++impl DerefMut for StreamResult {
++    fn deref_mut(&mut self) -> &mut Self::Target {
++        &mut self.inner
++    }
++}
+diff --git a/39/kv/src/service/topic.rs b/39/kv/src/service/topic.rs
+index 80fe82f..1a65320 100644
+--- a/39/kv/src/service/topic.rs
++++ b/39/kv/src/service/topic.rs
+@@ -133,6 +133,8 @@ impl Broadcaster {
+ mod tests {
+     use std::convert::TryInto;
+
++    use tokio::sync::mpsc::Receiver;
++
+     use crate::assert_res_ok;
+
+     use super::*;
+@@ -151,8 +153,8 @@ mod tests {
+         b.clone().publish(lobby.clone(), Arc::new(v.clone().into()));
+
+         // subscribers 应该能收到 publish 的数据
+-        let id1: i64 = stream1.recv().await.unwrap().as_ref().try_into().unwrap();
+-        let id2: i64 = stream2.recv().await.unwrap().as_ref().try_into().unwrap();
++        let id1 = get_id(&mut stream1).await;
++        let id2 = get_id(&mut stream2).await;
+
+         assert!(id1 != id2);
+
+@@ -174,4 +176,9 @@ mod tests {
+         let res2 = stream2.recv().await.unwrap();
+         assert_res_ok(&res2, &[v.clone()], &[]);
+     }
++
++    pub async fn get_id(res: &mut Receiver<Arc<CommandResponse>>) -> u32 {
++        let id: i64 = res.recv().await.unwrap().as_ref().try_into().unwrap();
++        id as u32
++    }
+ }
+diff --git a/39/kv/src/service/topic_service.rs b/39/kv/src/service/topic_service.rs
+index 95deef4..1887b0a 100644
+--- a/39/kv/src/service/topic_service.rs
++++ b/39/kv/src/service/topic_service.rs
+@@ -57,7 +57,7 @@ mod tests {
+         let topic = Arc::new(Broadcaster::default());
+         let cmd = CommandRequest::new_subscribe("lobby");
+         let mut res = dispatch_stream(cmd, topic);
+-        let id: i64 = res.next().await.unwrap().as_ref().try_into().unwrap();
++        let id = get_id(&mut res).await;
+         assert!(id > 0);
+     }
+
+@@ -67,7 +67,7 @@ mod tests {
+         let id = {
+             let cmd = CommandRequest::new_subscribe("lobby");
+             let mut res = dispatch_stream(cmd, topic.clone());
+-            let id: i64 = res.next().await.unwrap().as_ref().try_into().unwrap();
++            let id = get_id(&mut res).await;
+             drop(res);
+             id as u32
+         };
+@@ -87,7 +87,7 @@ mod tests {
+         let topic = Arc::new(Broadcaster::default());
+         let cmd = CommandRequest::new_subscribe("lobby");
+         let mut res = dispatch_stream(cmd, topic.clone());
+-        let id: i64 = res.next().await.unwrap().as_ref().try_into().unwrap();
++        let id = get_id(&mut res).await;
+
+         let cmd = CommandRequest::new_unsubscribe("lobby", id as _);
+         let mut res = dispatch_stream(cmd, topic);
+@@ -106,4 +106,9 @@ mod tests {
+
+         assert_res_error(&data, 404, "Not found: subscription 9527");
+     }
++
++    pub async fn get_id(res: &mut StreamingResponse) -> u32 {
++        let id: i64 = res.next().await.unwrap().as_ref().try_into().unwrap();
++        id as u32
++    }
+ }

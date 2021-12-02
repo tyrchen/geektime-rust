@@ -1,0 +1,612 @@
+diff --git a/39/kv/Cargo.toml b/39/kv/Cargo.toml
+index fba1f26..38f9bd1 100644
+--- a/39/kv/Cargo.toml
++++ b/39/kv/Cargo.toml
+@@ -23,7 +23,8 @@ rustls-native-certs = "0.5"
+ sled = "0.34" # sled db
+ thiserror = "1" # 错误定义和处理
+ tokio = { version = "1", features = ["full" ] } # 异步网络库
+-tokio-rustls = "0.22"
++tokio-rustls = "0.22" # 处理 TLS
++tokio-stream = { version = "0.1", features = ["sync"] } # 处理 stream
+ tokio-util = { version = "0.6", features = ["compat"]} # tokio 和 futures 的兼容性库
+ tracing = "0.1" # 日志处理
+ tracing-subscriber = "0.2" # 日志处理
+diff --git a/39/kv/abi.proto b/39/kv/abi.proto
+index 9599de7..4ff1abe 100644
+--- a/39/kv/abi.proto
++++ b/39/kv/abi.proto
+@@ -14,6 +14,9 @@ message CommandRequest {
+     Hmdel hmdel = 7;
+     Hexist hexist = 8;
+     Hmexist hmexist = 9;
++    Subscribe subscribe = 10;
++    Unsubscribe unsubscribe = 11;
++    Publish publish = 12;
+   }
+ }
+
+@@ -98,3 +101,19 @@ message Hmexist {
+   string table = 1;
+   repeated string keys = 2;
+ }
++
++// subscribe 到某个主题，任何发布到这个主题的数据都会被收到
++// 成功后，第一个返回的 CommandResponse，我们返回一个唯一的 subscription id
++message Subscribe { string topic = 1; }
++
++// 取消对某个主题的订阅
++message Unsubscribe {
++  string topic = 1;
++  uint32 id = 2;
++}
++
++// 发布数据到某个主题
++message Publish {
++  string topic = 1;
++  repeated Value data = 2;
++}
+diff --git a/39/kv/src/error.rs b/39/kv/src/error.rs
+index b33c647..3a5b1e7 100644
+--- a/39/kv/src/error.rs
++++ b/39/kv/src/error.rs
+@@ -1,4 +1,3 @@
+-use crate::Value;
+ use thiserror::Error;
+
+ #[derive(Error, Debug)]
+@@ -9,8 +8,8 @@ pub enum KvError {
+     FrameError,
+     #[error("Command is invalid: `{0}`")]
+     InvalidCommand(String),
+-    #[error("Cannot convert value {:0} to {1}")]
+-    ConvertError(Value, &'static str),
++    #[error("Cannot convert value {0} to {1}")]
++    ConvertError(String, &'static str),
+     #[error("Cannot process command {0} with table: {1}, key: {2}. Error: {}")]
+     StorageError(&'static str, String, String, String),
+     #[error("Certificate parse error: error to load {0} {0}")]
+diff --git a/39/kv/src/network/mod.rs b/39/kv/src/network/mod.rs
+index 1b680ab..c7ddb1b 100644
+--- a/39/kv/src/network/mod.rs
++++ b/39/kv/src/network/mod.rs
+@@ -144,14 +144,14 @@ mod tests {
+         let res = client.execute(cmd).await.unwrap();
+
+         // 第一次 HSET 服务器应该返回 None
+-        assert_res_ok(res, &[Value::default()], &[]);
++        assert_res_ok(&res, &[Value::default()], &[]);
+
+         // 再发一个 HSET
+         let cmd = CommandRequest::new_hget("t1", "k1");
+         let res = client.execute(cmd).await?;
+
+         // 服务器应该返回上一次的结果
+-        assert_res_ok(res, &["v1".into()], &[]);
++        assert_res_ok(&res, &["v1".into()], &[]);
+
+         Ok(())
+     }
+@@ -167,12 +167,12 @@ mod tests {
+         let cmd = CommandRequest::new_hset("t2", "k2", v.clone().into());
+         let res = client.execute(cmd).await?;
+
+-        assert_res_ok(res, &[Value::default()], &[]);
++        assert_res_ok(&res, &[Value::default()], &[]);
+
+         let cmd = CommandRequest::new_hget("t2", "k2");
+         let res = client.execute(cmd).await?;
+
+-        assert_res_ok(res, &[v.into()], &[]);
++        assert_res_ok(&res, &[v.into()], &[]);
+
+         Ok(())
+     }
+diff --git a/39/kv/src/network/multiplex.rs b/39/kv/src/network/multiplex.rs
+index b900a63..d698115 100644
+--- a/39/kv/src/network/multiplex.rs
++++ b/39/kv/src/network/multiplex.rs
+@@ -171,7 +171,7 @@ mod tests {
+
+         let cmd = CommandRequest::new_hget("t1", "k1");
+         let res = client.execute(cmd).await.unwrap();
+-        assert_res_ok(res, &["v1".into()], &[]);
++        assert_res_ok(&res, &["v1".into()], &[]);
+
+         Ok(())
+     }
+diff --git a/39/kv/src/pb/abi.rs b/39/kv/src/pb/abi.rs
+index 334fae8..29155c3 100644
+--- a/39/kv/src/pb/abi.rs
++++ b/39/kv/src/pb/abi.rs
+@@ -2,7 +2,7 @@
+ #[derive(PartialOrd)]
+ #[derive(Clone, PartialEq, ::prost::Message)]
+ pub struct CommandRequest {
+-    #[prost(oneof="command_request::RequestData", tags="1, 2, 3, 4, 5, 6, 7, 8, 9")]
++    #[prost(oneof="command_request::RequestData", tags="1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12")]
+     pub request_data: ::core::option::Option<command_request::RequestData>,
+ }
+ /// Nested message and enum types in `CommandRequest`.
+@@ -28,6 +28,12 @@ pub mod command_request {
+         Hexist(super::Hexist),
+         #[prost(message, tag="9")]
+         Hmexist(super::Hmexist),
++        #[prost(message, tag="10")]
++        Subscribe(super::Subscribe),
++        #[prost(message, tag="11")]
++        Unsubscribe(super::Unsubscribe),
++        #[prost(message, tag="12")]
++        Publish(super::Publish),
+     }
+ }
+ /// 服务器的响应
+@@ -161,3 +167,29 @@ pub struct Hmexist {
+     #[prost(string, repeated, tag="2")]
+     pub keys: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+ }
++/// subscribe 到某个主题，任何发布到这个主题的数据都会被收到
++/// 成功后，第一个返回的 CommandResponse，我们返回一个唯一的 subscription id
++#[derive(PartialOrd)]
++#[derive(Clone, PartialEq, ::prost::Message)]
++pub struct Subscribe {
++    #[prost(string, tag="1")]
++    pub topic: ::prost::alloc::string::String,
++}
++/// 取消对某个主题的订阅
++#[derive(PartialOrd)]
++#[derive(Clone, PartialEq, ::prost::Message)]
++pub struct Unsubscribe {
++    #[prost(string, tag="1")]
++    pub topic: ::prost::alloc::string::String,
++    #[prost(uint32, tag="2")]
++    pub id: u32,
++}
++/// 发布数据到某个主题
++#[derive(PartialOrd)]
++#[derive(Clone, PartialEq, ::prost::Message)]
++pub struct Publish {
++    #[prost(string, tag="1")]
++    pub topic: ::prost::alloc::string::String,
++    #[prost(message, repeated, tag="2")]
++    pub data: ::prost::alloc::vec::Vec<Value>,
++}
+diff --git a/39/kv/src/pb/mod.rs b/39/kv/src/pb/mod.rs
+index 6cb5cd1..7534974 100644
+--- a/39/kv/src/pb/mod.rs
++++ b/39/kv/src/pb/mod.rs
+@@ -1,6 +1,6 @@
+ pub mod abi;
+
+-use std::convert::TryFrom;
++use std::convert::{TryFrom, TryInto};
+
+ use abi::{command_request::RequestData, *};
+ use bytes::Bytes;
+@@ -89,6 +89,25 @@ impl CommandRequest {
+             })),
+         }
+     }
++
++    /// 转换成 string 做错误处理
++    pub fn format(&self) -> String {
++        format!("{:?}", self)
++    }
++}
++
++impl CommandResponse {
++    /// 转换成 string 做错误处理
++    pub fn format(&self) -> String {
++        format!("{:?}", self)
++    }
++}
++
++impl Value {
++    /// 转换成 string 做错误处理
++    pub fn format(&self) -> String {
++        format!("{:?}", self)
++    }
+ }
+
+ impl Kvpair {
+@@ -216,7 +235,18 @@ impl TryFrom<Value> for i64 {
+     fn try_from(v: Value) -> Result<Self, Self::Error> {
+         match v.value {
+             Some(value::Value::Integer(i)) => Ok(i),
+-            _ => Err(KvError::ConvertError(v, "Integer")),
++            _ => Err(KvError::ConvertError(v.format(), "Integer")),
++        }
++    }
++}
++
++impl TryFrom<&Value> for i64 {
++    type Error = KvError;
++
++    fn try_from(v: &Value) -> Result<Self, Self::Error> {
++        match v.value {
++            Some(value::Value::Integer(i)) => Ok(i),
++            _ => Err(KvError::ConvertError(v.format(), "Integer")),
+         }
+     }
+ }
+@@ -227,7 +257,7 @@ impl TryFrom<Value> for f64 {
+     fn try_from(v: Value) -> Result<Self, Self::Error> {
+         match v.value {
+             Some(value::Value::Float(f)) => Ok(f),
+-            _ => Err(KvError::ConvertError(v, "Float")),
++            _ => Err(KvError::ConvertError(v.format(), "Float")),
+         }
+     }
+ }
+@@ -238,7 +268,7 @@ impl TryFrom<Value> for Bytes {
+     fn try_from(v: Value) -> Result<Self, Self::Error> {
+         match v.value {
+             Some(value::Value::Binary(b)) => Ok(b),
+-            _ => Err(KvError::ConvertError(v, "Binary")),
++            _ => Err(KvError::ConvertError(v.format(), "Binary")),
+         }
+     }
+ }
+@@ -249,7 +279,7 @@ impl TryFrom<Value> for bool {
+     fn try_from(v: Value) -> Result<Self, Self::Error> {
+         match v.value {
+             Some(value::Value::Bool(b)) => Ok(b),
+-            _ => Err(KvError::ConvertError(v, "Boolean")),
++            _ => Err(KvError::ConvertError(v.format(), "Boolean")),
+         }
+     }
+ }
+@@ -271,3 +301,17 @@ impl TryFrom<&[u8]> for Value {
+         Ok(msg)
+     }
+ }
++
++impl TryFrom<&CommandResponse> for i64 {
++    type Error = KvError;
++
++    fn try_from(value: &CommandResponse) -> Result<Self, Self::Error> {
++        if value.status != StatusCode::OK.as_u16() as u32 {
++            return Err(KvError::ConvertError(value.format(), "CommandResponse"));
++        }
++        match value.values.get(0) {
++            Some(v) => v.try_into(),
++            None => Err(KvError::ConvertError(value.format(), "CommandResponse")),
++        }
++    }
++}
+diff --git a/39/kv/src/service/command_service.rs b/39/kv/src/service/command_service.rs
+index a798c77..e609036 100644
+--- a/39/kv/src/service/command_service.rs
++++ b/39/kv/src/service/command_service.rs
+@@ -119,7 +119,7 @@ mod tests {
+         dispatch(cmd, &store);
+         let cmd = CommandRequest::new_hget("score", "u1");
+         let res = dispatch(cmd, &store);
+-        assert_res_ok(res, &[10.into()], &[]);
++        assert_res_ok(&res, &[10.into()], &[]);
+     }
+
+     #[test]
+@@ -127,7 +127,7 @@ mod tests {
+         let store = MemTable::new();
+         let cmd = CommandRequest::new_hget("score", "u1");
+         let res = dispatch(cmd, &store);
+-        assert_res_error(res, 404, "Not found");
++        assert_res_error(&res, 404, "Not found");
+     }
+
+     #[test]
+@@ -143,7 +143,7 @@ mod tests {
+         let cmd = CommandRequest::new_hmget("user", vec!["u1".into(), "u4".into(), "u3".into()]);
+         let res = dispatch(cmd, &store);
+         let values = &["Tyr".into(), Value::default(), "Rosie".into()];
+-        assert_res_ok(res, values, &[]);
++        assert_res_ok(&res, values, &[]);
+     }
+
+     #[test]
+@@ -163,7 +163,7 @@ mod tests {
+             Kvpair::new("u2", 8.into()),
+             Kvpair::new("u3", 11.into()),
+         ];
+-        assert_res_ok(res, &[], pairs);
++        assert_res_ok(&res, &[], pairs);
+     }
+
+     #[test]
+@@ -171,10 +171,10 @@ mod tests {
+         let store = MemTable::new();
+         let cmd = CommandRequest::new_hset("t1", "hello", "world".into());
+         let res = dispatch(cmd.clone(), &store);
+-        assert_res_ok(res, &[Value::default()], &[]);
++        assert_res_ok(&res, &[Value::default()], &[]);
+
+         let res = dispatch(cmd, &store);
+-        assert_res_ok(res, &["world".into()], &[]);
++        assert_res_ok(&res, &["world".into()], &[]);
+     }
+
+     #[test]
+@@ -187,7 +187,7 @@ mod tests {
+         ];
+         let cmd = CommandRequest::new_hmset("t1", pairs);
+         let res = dispatch(cmd, &store);
+-        assert_res_ok(res, &["world".into(), Value::default()], &[]);
++        assert_res_ok(&res, &["world".into(), Value::default()], &[]);
+     }
+
+     #[test]
+@@ -196,11 +196,11 @@ mod tests {
+         set_key_pairs("t1", vec![("u1", "v1")], &store);
+         let cmd = CommandRequest::new_hdel("t1", "u2");
+         let res = dispatch(cmd, &store);
+-        assert_res_ok(res, &[Value::default()], &[]);
++        assert_res_ok(&res, &[Value::default()], &[]);
+
+         let cmd = CommandRequest::new_hdel("t1", "u1");
+         let res = dispatch(cmd, &store);
+-        assert_res_ok(res, &["v1".into()], &[]);
++        assert_res_ok(&res, &["v1".into()], &[]);
+     }
+
+     #[test]
+@@ -210,7 +210,7 @@ mod tests {
+
+         let cmd = CommandRequest::new_hmdel("t1", vec!["u1".into(), "u3".into()]);
+         let res = dispatch(cmd, &store);
+-        assert_res_ok(res, &["v1".into(), Value::default()], &[]);
++        assert_res_ok(&res, &["v1".into(), Value::default()], &[]);
+     }
+
+     #[test]
+@@ -219,11 +219,11 @@ mod tests {
+         set_key_pairs("t1", vec![("u1", "v1")], &store);
+         let cmd = CommandRequest::new_hexist("t1", "u2");
+         let res = dispatch(cmd, &store);
+-        assert_res_ok(res, &[false.into()], &[]);
++        assert_res_ok(&res, &[false.into()], &[]);
+
+         let cmd = CommandRequest::new_hexist("t1", "u1");
+         let res = dispatch(cmd, &store);
+-        assert_res_ok(res, &[true.into()], &[]);
++        assert_res_ok(&res, &[true.into()], &[]);
+     }
+
+     #[test]
+@@ -233,7 +233,7 @@ mod tests {
+
+         let cmd = CommandRequest::new_hmexist("t1", vec!["u1".into(), "u3".into()]);
+         let res = dispatch(cmd, &store);
+-        assert_res_ok(res, &[true.into(), false.into()], &[]);
++        assert_res_ok(&res, &[true.into(), false.into()], &[]);
+     }
+
+     fn set_key_pairs<T: Into<Value>>(table: &str, pairs: Vec<(&str, T)>, store: &impl Storage) {
+diff --git a/39/kv/src/service/mod.rs b/39/kv/src/service/mod.rs
+index 43c3ca1..8f524b4 100644
+--- a/39/kv/src/service/mod.rs
++++ b/39/kv/src/service/mod.rs
+@@ -5,6 +5,9 @@ use std::sync::Arc;
+ use tracing::debug;
+
+ mod command_service;
++mod topic;
++
++pub use topic::{Broadcaster, Topic};
+
+ /// 对 Command 的处理的抽象
+ pub trait CommandService {
+@@ -131,9 +134,19 @@ pub fn dispatch(cmd: CommandRequest, store: &impl Storage) -> CommandResponse {
+         Some(RequestData::Hexist(param)) => param.execute(store),
+         Some(RequestData::Hmexist(param)) => param.execute(store),
+         None => KvError::InvalidCommand("Request has no data".into()).into(),
++        _ => todo!(),
+     }
+ }
+
+ #[cfg(test)]
+ mod tests {
+     use std::thread;
+@@ -155,13 +168,13 @@ mod tests {
+         // 创建一个线程，在 table t1 中写入 k1, v1
+         let handle = thread::spawn(move || {
+             let res = cloned.execute(CommandRequest::new_hset("t1", "k1", "v1".into()));
+-            assert_res_ok(res, &[Value::default()], &[]);
++            assert_res_ok(&res, &[Value::default()], &[]);
+         });
+         handle.join().unwrap();
+
+         // 在当前线程下读取 table t1 的 k1，应该返回 v1
+         let res = service.execute(CommandRequest::new_hget("t1", "k1"));
+-        assert_res_ok(res, &["v1".into()], &[]);
++        assert_res_ok(&res, &["v1".into()], &[]);
+     }
+
+     #[test]
+@@ -199,17 +212,18 @@ use crate::{Kvpair, Value};
+
+ // 测试成功返回的结果
+ #[cfg(test)]
+-pub fn assert_res_ok(mut res: CommandResponse, values: &[Value], pairs: &[Kvpair]) {
+-    res.pairs.sort_by(|a, b| a.partial_cmp(b).unwrap());
++pub fn assert_res_ok(res: &CommandResponse, values: &[Value], pairs: &[Kvpair]) {
++    let mut sorted_pairs = res.pairs.clone();
++    sorted_pairs.sort_by(|a, b| a.partial_cmp(b).unwrap());
+     assert_eq!(res.status, 200);
+     assert_eq!(res.message, "");
+     assert_eq!(res.values, values);
+-    assert_eq!(res.pairs, pairs);
++    assert_eq!(sorted_pairs, pairs);
+ }
+
+ // 测试失败返回的结果
+ #[cfg(test)]
+-pub fn assert_res_error(res: CommandResponse, code: u32, msg: &str) {
++pub fn assert_res_error(res: &CommandResponse, code: u32, msg: &str) {
+     assert_eq!(res.status, code);
+     assert!(res.message.contains(msg));
+     assert_eq!(res.values, &[]);
+diff --git a/39/kv/src/service/topic.rs b/39/kv/src/service/topic.rs
+new file mode 100644
+index 0000000..3037227
+--- /dev/null
++++ b/39/kv/src/service/topic.rs
+@@ -0,0 +1,158 @@
++use dashmap::{DashMap, DashSet};
++use std::sync::{
++    atomic::{AtomicU32, Ordering},
++    Arc,
++};
++use tokio::sync::mpsc;
++use tracing::{debug, info, warn};
++
++use crate::{CommandResponse, Value};
++
++/// topic 里最大存放的数据
++const BROADCAST_CAPACITY: usize = 128;
++
++/// 下一个 subscription id
++static NEXT_ID: AtomicU32 = AtomicU32::new(1);
++
++/// 获取下一个 subscription id
++fn get_next_subscription_id() -> u32 {
++    NEXT_ID.fetch_add(1, Ordering::Relaxed)
++}
++
++pub trait Topic {
++    /// 订阅某个主题
++    fn subscribe(self, name: String) -> mpsc::Receiver<Arc<CommandResponse>>;
++    /// 取消对主题的订阅
++    fn unsubscribe(self, name: String, id: u32);
++    /// 往主题里发布一个数据
++    fn publish(self, name: String, value: Arc<CommandResponse>);
++}
++
++/// 用于主题发布和订阅的数据结构
++#[derive(Default)]
++pub struct Broadcaster {
++    /// 所有的主题列表
++    topics: DashMap<String, DashSet<u32>>,
++    /// 所有的订阅列表
++    subscriptions: DashMap<u32, mpsc::Sender<Arc<CommandResponse>>>,
++}
++
++impl Topic for Arc<Broadcaster> {
++    fn subscribe(self, name: String) -> mpsc::Receiver<Arc<CommandResponse>> {
++        let id = {
++            let entry = self.topics.entry(name).or_default();
++            let id = get_next_subscription_id();
++            entry.value().insert(id);
++            id
++        };
++
++        // 生成一个 mpsc channel
++        let (tx, rx) = mpsc::channel(BROADCAST_CAPACITY);
++
++        let v: Value = (id as i64).into();
++
++        // 立刻发送 subscription id 到 rx
++        let tx1 = tx.clone();
++        tokio::spawn(async move {
++            if let Err(e) = tx1.send(Arc::new(v.into())).await {
++                // TODO: 这个很小概率发生，但目前我们没有善后
++                warn!("Failed to send subscription id: {}. Error: {:?}", id, e);
++            }
++        });
++
++        // 把 tx 存入 subscription table
++        self.subscriptions.insert(id, tx);
++        debug!("Subscription {} is added", id);
++
++        // 返回 rx 给网络处理的上下文
++        rx
++    }
++
++    fn unsubscribe(self, name: String, id: u32) {
++        if let Some(v) = self.topics.get_mut(&name) {
++            // 在 topics 表里找到 topic 的 subscription id，删除
++            v.remove(&id);
++
++            // 如果这个 topic 为空，则也删除 topic
++            if v.is_empty() {
++                info!("Topic: {:?} is deleted", &name);
++                drop(v);
++                self.topics.remove(&name);
++            }
++        }
++
++        debug!("Subscription {} is removed!", id);
++        // 在 subscription 表中同样删除
++        self.subscriptions.remove(&id);
++    }
++
++    fn publish(self, name: String, value: Arc<CommandResponse>) {
++        tokio::spawn(async move {
++            match self.topics.get(&name) {
++                Some(chan) => {
++                    // 复制整个 topic 下所有的 subscription id
++                    // 这里我们每个 id 是 u32，如果一个 topic 下有 10k 订阅，复制的成本
++                    // 也就是 40k 堆内存（外加一些控制结构），所以效率不算差
++                    // 这也是为什么我们用 NEXT_ID 来控制 subscription id 的生成
++                    let chan = chan.value().clone();
++
++                    // 循环发送
++                    for id in chan.into_iter() {
++                        if let Some(tx) = self.subscriptions.get(&id) {
++                            if let Err(e) = tx.send(value.clone()).await {
++                                warn!("Publish to {} failed! error: {:?}", id, e);
++                            }
++                        }
++                    }
++                }
++                None => {}
++            }
++        });
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use std::convert::TryInto;
++
++    use crate::assert_res_ok;
++
++    use super::*;
++
++    #[tokio::test]
++    async fn pub_sub_should_work() {
++        let b = Arc::new(Broadcaster::default());
++        let lobby = "lobby".to_string();
++
++        // subscribe
++        let mut stream1 = b.clone().subscribe(lobby.clone());
++        let mut stream2 = b.clone().subscribe(lobby.clone());
++
++        // publish
++        let v: Value = "hello".into();
++        b.clone().publish(lobby.clone(), Arc::new(v.clone().into()));
++
++        // subscribers 应该能收到 publish 的数据
++        let id1: i64 = stream1.recv().await.unwrap().as_ref().try_into().unwrap();
++        let id2: i64 = stream2.recv().await.unwrap().as_ref().try_into().unwrap();
++
++        assert!(id1 != id2);
++
++        let res1 = stream1.recv().await.unwrap();
++        let res2 = stream2.recv().await.unwrap();
++
++        assert_eq!(res1, res2);
++        assert_res_ok(&res1, &[v.clone()], &[]);
++
++        // 如果 subscriber 取消订阅，则收不到新数据
++        b.clone().unsubscribe(lobby.clone(), id1 as _);
++
++        // publish
++        let v: Value = "world".into();
++        b.clone().publish(lobby.clone(), Arc::new(v.clone().into()));
++
++        assert!(stream1.recv().await.is_none());
++        let res2 = stream2.recv().await.unwrap();
++        assert_res_ok(&res2, &[v.clone()], &[]);
++    }
++}
