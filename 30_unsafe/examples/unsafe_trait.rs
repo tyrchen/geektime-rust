@@ -1,4 +1,5 @@
-// 实现这个 trait 的开发者要保证实现是内存安全的
+/// # Safety
+/// 实现这个 trait 的开发者要保证实现是内存安全的
 unsafe trait Foo {
     fn foo(&self);
 }
@@ -10,6 +11,8 @@ trait Bar {
 
 struct Nonsense;
 
+/// # Safety
+/// example
 unsafe impl Foo for Nonsense {
     fn foo(&self) {
         println!("foo!");

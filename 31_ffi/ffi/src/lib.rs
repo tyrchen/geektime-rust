@@ -63,7 +63,7 @@ pub extern "C" fn hello(name: *const c_char) -> *const c_char {
 #[no_mangle]
 pub unsafe extern "C" fn free_str(s: *mut c_char) {
     if !s.is_null() {
-        CString::from_raw(s);
+        let _ = CString::from_raw(s);
     }
 }
 

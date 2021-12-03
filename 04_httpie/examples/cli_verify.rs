@@ -47,6 +47,7 @@ struct Post {
 }
 
 /// 命令行中的 key=value 可以通过 parse_kv_pair 解析成 KvPair 结构
+#[allow(dead_code)]
 #[derive(Debug)]
 struct KvPair {
     k: String,

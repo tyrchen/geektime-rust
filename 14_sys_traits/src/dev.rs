@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 struct Developer {
     name: String,

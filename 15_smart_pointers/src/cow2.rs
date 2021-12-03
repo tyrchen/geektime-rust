@@ -1,6 +1,7 @@
 use serde::Deserialize;
 use std::borrow::Cow;
 
+#[allow(dead_code)]
 #[derive(Debug, Deserialize)]
 struct User<'input> {
     #[serde(borrow)]
