@@ -18,6 +18,7 @@ path = "src/hash.rs"
 [[bin]]
 name = "siphasher"
 path = "src/siphasher.rs"
+doc = false
 
 [[bin]]
 name = "hashmap3"
