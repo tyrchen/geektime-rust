@@ -6,10 +6,12 @@ edition = "2018"
 [[bin]]
 name = "kvs"
 path = "src/server.rs"
+doc = false
 
 [[bin]]
 name = "kvc"
 path = "src/client.rs"
+doc = false
 
 [dependencies]
 anyhow = "1" # 错误处理
