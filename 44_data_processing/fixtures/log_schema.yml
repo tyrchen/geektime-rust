@@ -1,0 +1,23 @@
+---
+- name: ip
+  type: string
+- name: unused1
+  type: string
+- name: unused2
+  type: string
+- name: date
+  type: string
+- name: method
+  type: string
+- name: url
+  type: string
+- name: version
+  type: string
+- name: code
+  type: integer
+- name: len
+  type: integer
+- name: unused3
+  type: string
+- name: ua
+  type: string

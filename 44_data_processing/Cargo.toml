@@ -1,0 +1,17 @@
+[package]
+name = "data_processing"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dev-dependencies]
+anyhow = "1"
+argon2 = "0.3"
+datafusion = "6"
+lazy_static = "1"
+rand_core = { version = "0.6", features = ["std"] }
+serde = { version = "1", features = ["derive"] }
+serde_yaml = "0.8"
+sqlx = { version = "0.5", features = ["runtime-tokio-rustls", "sqlite"] }
+tokio = { version = "1", features = ["full" ] }

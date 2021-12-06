@@ -41,4 +41,6 @@ members = [
   "40_async_stream",
   "41_kv",
   "42_kv",
+  "43_docdoc",
+  "44_data_processing",
 ]
