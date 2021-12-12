@@ -1,0 +1,397 @@
+diff --git a/43/kv/Cargo.toml b/43/kv/Cargo.toml
+index 4f6402b..1c15362 100644
+--- a/43/kv/Cargo.toml
++++ b/43/kv/Cargo.toml
+@@ -20,12 +20,14 @@ futures = "0.3" # 提供 Stream trait
+ http = "0.2" # 我们使用 HTTP status code 所以引入这个类型库
+ prost = "0.8" # 处理 protobuf 的代码
+ rustls-native-certs = "0.5"
++serde = { version = "1", features = ["derive"] } # 序列化/反序列化
+ sled = "0.34" # sled db
+ thiserror = "1" # 错误定义和处理
+ tokio = { version = "1", features = ["full" ] } # 异步网络库
+ tokio-rustls = "0.22" # 处理 TLS
+ tokio-stream = { version = "0.1", features = ["sync"] } # 处理 stream
+ tokio-util = { version = "0.6", features = ["compat"]} # tokio 和 futures 的兼容性库
++toml = "0.5" # toml 支持
+ tracing = "0.1" # 日志处理
+ tracing-subscriber = "0.2" # 日志处理
+ yamux = "0.9" # yamux 多路复用支持
+@@ -33,8 +35,14 @@ yamux = "0.9" # yamux 多路复用支持
+ [dev-dependencies]
+ async-prost = "0.2.1" # 支持把 protobuf 封装成 TCP frame
+ certify = "0.3"
++criterion = { version = "0.3", features = ["async_futures", "async_tokio", "html_reports"] } # benchmark
++rand = "0.8"
+ tempfile = "3" # 处理临时目录和临时文件
+ tokio-util = { version = "0.6", features = ["codec"]}
+
+ [build-dependencies]
+ prost-build = "0.8" # 编译 protobuf
++
++[[bench]]
++name = "pubsub"
++harness = false
+diff --git a/43/kv/examples/gen_config.rs b/43/kv/examples/gen_config.rs
+new file mode 100644
+index 0000000..c275050
+--- /dev/null
++++ b/43/kv/examples/gen_config.rs
+@@ -0,0 +1,46 @@
++use anyhow::Result;
++use kv6::{
++    ClientConfig, ClientTlsConfig, GeneralConfig, ServerConfig, ServerTlsConfig, StorageConfig,
++};
++use std::fs;
++
++fn main() -> Result<()> {
++    const CA_CERT: &str = include_str!("../fixtures/ca.cert");
++    const SERVER_CERT: &str = include_str!("../fixtures/server.cert");
++    const SERVER_KEY: &str = include_str!("../fixtures/server.key");
++
++    let general_config = GeneralConfig {
++        addr: "127.0.0.1:9527".into(),
++    };
++    let server_config = ServerConfig {
++        storage: StorageConfig::SledDb("/tmp/kv_server".into()),
++        general: general_config.clone(),
++        tls: ServerTlsConfig {
++            cert: SERVER_CERT.into(),
++            key: SERVER_KEY.into(),
++            ca: None,
++        },
++    };
++
++    fs::write(
++        "fixtures/server.conf",
++        toml::to_string_pretty(&server_config)?,
++    )?;
++
++    let client_config = ClientConfig {
++        general: general_config,
++
++        tls: ClientTlsConfig {
++            identity: None,
++            ca: Some(CA_CERT.into()),
++            domain: "kvserver.acme.inc".into(),
++        },
++    };
++
++    fs::write(
++        "fixtures/client.conf",
++        toml::to_string_pretty(&client_config)?,
++    )?;
++
++    Ok(())
++}
+diff --git a/43/kv/src/client.rs b/43/kv/src/client.rs
+index 8dcc62d..70a962d 100644
+--- a/43/kv/src/client.rs
++++ b/43/kv/src/client.rs
+@@ -2,26 +2,18 @@ use std::time::Duration;
+
+ use anyhow::Result;
+ use futures::StreamExt;
+-use kv6::{CommandRequest, KvError, ProstClientStream, TlsClientConnector, YamuxCtrl};
+-use tokio::{net::TcpStream, time};
++use kv6::{start_client_with_config, ClientConfig, CommandRequest, KvError, ProstClientStream};
++use tokio::time;
+ use tokio_util::compat::Compat;
+ use tracing::info;
+
+ #[tokio::main]
+ async fn main() -> Result<()> {
+     tracing_subscriber::fmt::init();
++    let config: ClientConfig = toml::from_str(include_str!("../fixtures/client.conf"))?;
+
+-    // 以后用配置替换
+-    let ca_cert = include_str!("../fixtures/ca.cert");
+-
+-    let addr = "127.0.0.1:9527";
+-    // 连接服务器
+-    let connector = TlsClientConnector::new("kvserver.acme.inc", None, Some(ca_cert))?;
+-    let stream = TcpStream::connect(addr).await?;
+-    let stream = connector.connect(stream).await?;
+-
+-    // 打开一个 stream
+-    let mut ctrl = YamuxCtrl::new_client(stream, None);
++    // 打开一个 yamux ctrl
++    let mut ctrl = start_client_with_config(&config).await?;
+
+     let channel = "lobby";
+     start_publishing(ctrl.open_stream().await?, channel)?;
+diff --git a/43/kv/src/config.rs b/43/kv/src/config.rs
+new file mode 100644
+index 0000000..b98c9a8
+--- /dev/null
++++ b/43/kv/src/config.rs
+@@ -0,0 +1,77 @@
++use crate::KvError;
++use serde::{Deserialize, Serialize};
++use std::fs;
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
++pub struct ServerConfig {
++    pub general: GeneralConfig,
++    pub storage: StorageConfig,
++    pub tls: ServerTlsConfig,
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
++pub struct ClientConfig {
++    pub general: GeneralConfig,
++    pub tls: ClientTlsConfig,
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
++pub struct GeneralConfig {
++    pub addr: String,
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
++#[serde(tag = "type", content = "args")]
++pub enum StorageConfig {
++    MemTable,
++    SledDb(String),
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
++pub struct ServerTlsConfig {
++    pub cert: String,
++    pub key: String,
++    pub ca: Option<String>,
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
++pub struct ClientTlsConfig {
++    pub domain: String,
++    pub identity: Option<(String, String)>,
++    pub ca: Option<String>,
++}
++
++impl ServerConfig {
++    pub fn load(path: &str) -> Result<Self, KvError> {
++        let config = fs::read_to_string(path)?;
++        let config: Self = toml::from_str(&config)?;
++        Ok(config)
++    }
++}
++
++impl ClientConfig {
++    pub fn load(path: &str) -> Result<Self, KvError> {
++        let config = fs::read_to_string(path)?;
++        let config: Self = toml::from_str(&config)?;
++        Ok(config)
++    }
++}
++
++#[cfg(test)]
++mod tests {
++    use super::*;
++
++    #[test]
++    fn server_config_should_be_loaded() {
++        let result: Result<ServerConfig, toml::de::Error> =
++            toml::from_str(include_str!("../fixtures/server.conf"));
++        assert!(result.is_ok());
++    }
++
++    #[test]
++    fn client_config_should_be_loaded() {
++        let result: Result<ClientConfig, toml::de::Error> =
++            toml::from_str(include_str!("../fixtures/client.conf"));
++        assert!(result.is_ok());
++    }
++}
+diff --git a/43/kv/src/error.rs b/43/kv/src/error.rs
+index 09724c7..a5b5b42 100644
+--- a/43/kv/src/error.rs
++++ b/43/kv/src/error.rs
+@@ -27,6 +27,8 @@ pub enum KvError {
+     TlsError(#[from] tokio_rustls::rustls::TLSError),
+     #[error("Yamux Connection error")]
+     YamuxConnectionError(#[from] yamux::ConnectionError),
++    #[error("Parse config error")]
++    ConfigError(#[from] toml::de::Error),
+
+     #[error("Internal error: {0}")]
+     Internal(String),
+diff --git a/43/kv/src/lib.rs b/43/kv/src/lib.rs
+index 6b39275..4005f2a 100644
+--- a/43/kv/src/lib.rs
++++ b/43/kv/src/lib.rs
+@@ -1,11 +1,75 @@
++mod config;
+ mod error;
+ mod network;
+ mod pb;
+ mod service;
+ mod storage;
+
++pub use config::*;
+ pub use error::KvError;
+ pub use network::*;
+ pub use pb::abi::*;
+ pub use service::*;
+ pub use storage::*;
++
++use anyhow::Result;
++use tokio::net::{TcpListener, TcpStream};
++use tokio_rustls::client;
++use tokio_util::compat::FuturesAsyncReadCompatExt;
++use tracing::info;
++
++pub async fn start_server_with_config(config: &ServerConfig) -> Result<()> {
++    let acceptor =
++        TlsServerAcceptor::new(&config.tls.cert, &config.tls.key, config.tls.ca.as_deref())?;
++
++    let addr = &config.general.addr;
++    match &config.storage {
++        StorageConfig::MemTable => start_tls_server(addr, MemTable::new(), acceptor).await?,
++        StorageConfig::SledDb(path) => start_tls_server(addr, SledDb::new(path), acceptor).await?,
++    };
++
++    Ok(())
++}
++
++pub async fn start_client_with_config(
++    config: &ClientConfig,
++) -> Result<YamuxCtrl<client::TlsStream<TcpStream>>> {
++    let addr = &config.general.addr;
++    let tls = &config.tls;
++
++    let identity = tls.identity.as_ref().map(|(c, k)| (c.as_str(), k.as_str()));
++    let connector = TlsClientConnector::new(&tls.domain, identity, tls.ca.as_deref())?;
++    let stream = TcpStream::connect(addr).await?;
++    let stream = connector.connect(stream).await?;
++
++    // 打开一个 stream
++    Ok(YamuxCtrl::new_client(stream, None))
++}
++
++async fn start_tls_server<Store: Storage>(
++    addr: &str,
++    store: Store,
++    acceptor: TlsServerAcceptor,
++) -> Result<()> {
++    let service: Service<Store> = ServiceInner::new(store).into();
++    let listener = TcpListener::bind(addr).await?;
++    info!("Start listening on {}", addr);
++    loop {
++        let tls = acceptor.clone();
++        let (stream, addr) = listener.accept().await?;
++        info!("Client {:?} connected", addr);
++
++        let svc = service.clone();
++        tokio::spawn(async move {
++            let stream = tls.accept(stream).await.unwrap();
++            YamuxCtrl::new_server(stream, None, move |stream| {
++                let svc1 = svc.clone();
++                async move {
++                    let stream = ProstServerStream::new(stream.compat(), svc1.clone());
++                    stream.process().await.unwrap();
++                    Ok(())
++                }
++            });
++        });
++    }
++}
+diff --git a/43/kv/src/network/mod.rs b/43/kv/src/network/mod.rs
+index 6c3c63f..7de59f8 100644
+--- a/43/kv/src/network/mod.rs
++++ b/43/kv/src/network/mod.rs
+@@ -10,15 +10,15 @@ pub use stream::ProstStream;
+ pub use stream_result::StreamResult;
+ pub use tls::{TlsClientConnector, TlsServerAcceptor};
+
+-use crate::{CommandRequest, CommandResponse, KvError, Service};
++use crate::{CommandRequest, CommandResponse, KvError, Service, Storage};
+ use futures::{SinkExt, StreamExt};
+ use tokio::io::{AsyncRead, AsyncWrite};
+ use tracing::info;
+
+ /// 处理服务器端的某个 accept 下来的 socket 的读写
+-pub struct ProstServerStream<S> {
++pub struct ProstServerStream<S, Store> {
+     inner: ProstStream<S, CommandRequest, CommandResponse>,
+-    service: Service,
++    service: Service<Store>,
+ }
+
+ /// 处理客户端 socket 的读写
+@@ -26,11 +26,12 @@ pub struct ProstClientStream<S> {
+     inner: ProstStream<S, CommandResponse, CommandRequest>,
+ }
+
+-impl<S> ProstServerStream<S>
++impl<S, Store> ProstServerStream<S, Store>
+ where
+     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
++    Store: Storage,
+ {
+-    pub fn new(stream: S, service: Service) -> Self {
++    pub fn new(stream: S, service: Service<Store>) -> Self {
+         Self {
+             inner: ProstStream::new(stream),
+             service,
+diff --git a/43/kv/src/server.rs b/43/kv/src/server.rs
+index 1482bb5..dc4ffd1 100644
+--- a/43/kv/src/server.rs
++++ b/43/kv/src/server.rs
+@@ -1,39 +1,12 @@
+ use anyhow::Result;
+-use kv6::{MemTable, ProstServerStream, Service, ServiceInner, TlsServerAcceptor, YamuxCtrl};
+-use tokio::net::TcpListener;
+-use tokio_util::compat::FuturesAsyncReadCompatExt;
+-use tracing::info;
++use kv6::{start_server_with_config, ServerConfig};
+
+ #[tokio::main]
+ async fn main() -> Result<()> {
+     tracing_subscriber::fmt::init();
+-    let addr = "127.0.0.1:9527";
++    let config: ServerConfig = toml::from_str(include_str!("../fixtures/server.conf"))?;
+
+-    // 以后从配置文件取
+-    let server_cert = include_str!("../fixtures/server.cert");
+-    let server_key = include_str!("../fixtures/server.key");
++    start_server_with_config(&config).await?;
+
+-    let acceptor = TlsServerAcceptor::new(server_cert, server_key, None)?;
+-
+-    let service: Service = ServiceInner::new(MemTable::new()).into();
+-    let listener = TcpListener::bind(addr).await?;
+-    info!("Start listening on {}", addr);
+-    loop {
+-        let tls = acceptor.clone();
+-        let (stream, addr) = listener.accept().await?;
+-        info!("Client {:?} connected", addr);
+-
+-        let svc = service.clone();
+-        tokio::spawn(async move {
+-            let stream = tls.accept(stream).await.unwrap();
+-            YamuxCtrl::new_server(stream, None, move |stream| {
+-                let svc1 = svc.clone();
+-                async move {
+-                    let stream = ProstServerStream::new(stream.compat(), svc1.clone());
+-                    stream.process().await.unwrap();
+-                    Ok(())
+-                }
+-            });
+-        });
+-    }
++    Ok(())
+ }
+diff --git a/43/kv/src/storage/mod.rs b/43/kv/src/storage/mod.rs
+index 55f7d77..e18bc7f 100644
+--- a/43/kv/src/storage/mod.rs
++++ b/43/kv/src/storage/mod.rs
+@@ -7,7 +7,7 @@ pub use sleddb::SledDb;
+ use crate::{KvError, Kvpair, Value};
+
+ /// 对存储的抽象，我们不关心数据存在哪儿，但需要定义外界如何和存储打交道
+-pub trait Storage {
++pub trait Storage: Send + Sync + 'static {
+     /// 从一个 HashTable 里获取一个 key 的 value
+     fn get(&self, table: &str, key: &str) -> Result<Option<Value>, KvError>;
+     /// 从一个 HashTable 里设置一个 key 的 value，返回旧的 value

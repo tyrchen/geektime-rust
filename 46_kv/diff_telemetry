@@ -1,0 +1,260 @@
+diff --git a/43/kv/Cargo.toml b/43/kv/Cargo.toml
+index cbbe18d..5c90edb 100644
+--- a/43/kv/Cargo.toml
++++ b/43/kv/Cargo.toml
+@@ -18,6 +18,7 @@ dashmap = "4" # 并发 HashMap
+ flate2 = "1" # gzip 压缩
+ futures = "0.3" # 提供 Stream trait
+ http = "0.2" # 我们使用 HTTP status code 所以引入这个类型库
++opentelemetry-jaeger = "0.15" # opentelemetry jaeger 支持
+ prost = "0.8" # 处理 protobuf 的代码
+ rustls-native-certs = "0.5"
+ serde = { version = "1", features = ["derive"] } # 序列化/反序列化
+@@ -29,7 +30,9 @@ tokio-stream = { version = "0.1", features = ["sync"] } # 处理 stream
+ tokio-util = { version = "0.6", features = ["compat"]} # tokio 和 futures 的兼容性库
+ toml = "0.5" # toml 支持
+ tracing = "0.1" # 日志处理
+-tracing-subscriber = "0.2" # 日志处理
++tracing-appender = "0.1" # 文件日志
++tracing-opentelemetry = "0.15" # opentelemetry 支持
++tracing-subscriber = { version = "0.2", features = ["json", "chrono"] } # 日志处理
+ yamux = "0.9" # yamux 多路复用支持
+
+ [dev-dependencies]
+diff --git a/43/kv/benches/pubsub.rs b/43/kv/benches/pubsub.rs
+index c80d153..c6abefd 100644
+--- a/43/kv/benches/pubsub.rs
++++ b/43/kv/benches/pubsub.rs
+@@ -11,7 +11,8 @@ use tokio::net::TcpStream;
+ use tokio::runtime::Builder;
+ use tokio::time;
+ use tokio_rustls::client::TlsStream;
+-use tracing::info;
++use tracing::{info, span};
++use tracing_subscriber::{layer::SubscriberExt, prelude::*, EnvFilter};
+
+ async fn start_server() -> Result<()> {
+     let addr = "127.0.0.1:9999";
+@@ -64,7 +65,19 @@ async fn start_publishers(topic: &'static str, values: &'static [&'static str])
+ }
+
+ fn pubsub(c: &mut Criterion) {
+-    // tracing_subscriber::fmt::init();
++    let tracer = opentelemetry_jaeger::new_pipeline()
++        .with_service_name("kv-bench")
++        .install_simple()
++        .unwrap();
++    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
++
++    tracing_subscriber::registry()
++        .with(EnvFilter::from_default_env())
++        .with(opentelemetry)
++        .init();
++
++    let root = span!(tracing::Level::INFO, "app_start", work_units = 2);
++    let _enter = root.enter();
+     // 创建 Tokio runtime
+     let runtime = Builder::new_multi_thread()
+         .worker_threads(4)
+diff --git a/43/kv/src/lib.rs b/43/kv/src/lib.rs
+index 8df5ec1..37e9dbf 100644
+--- a/43/kv/src/lib.rs
++++ b/43/kv/src/lib.rs
+@@ -16,9 +16,10 @@ use anyhow::Result;
+ use tokio::net::{TcpListener, TcpStream};
+ use tokio_rustls::client;
+ use tokio_util::compat::FuturesAsyncReadCompatExt;
+-use tracing::info;
++use tracing::{info, instrument, span};
+
+ /// 通过配置创建 KV 服务器
++#[instrument(skip_all)]
+ pub async fn start_server_with_config(config: &ServerConfig) -> Result<()> {
+     let acceptor =
+         TlsServerAcceptor::new(&config.tls.cert, &config.tls.key, config.tls.ca.as_deref())?;
+@@ -33,6 +34,7 @@ pub async fn start_server_with_config(config: &ServerConfig) -> Result<()> {
+ }
+
+ /// 通过配置创建 KV 客户端
++#[instrument(skip_all)]
+ pub async fn start_client_with_config(
+     config: &ClientConfig,
+ ) -> Result<YamuxCtrl<client::TlsStream<TcpStream>>> {
+@@ -57,6 +59,8 @@ async fn start_tls_server<Store: Storage>(
+     let listener = TcpListener::bind(addr).await?;
+     info!("Start listening on {}", addr);
+     loop {
++        let root = span!(tracing::Level::INFO, "server_process");
++        let _enter = root.enter();
+         let tls = acceptor.clone();
+         let (stream, addr) = listener.accept().await?;
+         info!("Client {:?} connected", addr);
+diff --git a/43/kv/src/network/frame.rs b/43/kv/src/network/frame.rs
+index f508e00..6bfc4da 100644
+--- a/43/kv/src/network/frame.rs
++++ b/43/kv/src/network/frame.rs
+@@ -61,6 +61,7 @@ where
+             Ok(())
+         }
+     }
++
+     /// 把一个完整的 frame decode 成一个 Message
+     fn decode_frame(buf: &mut BytesMut) -> Result<Self, KvError> {
+         // 先取 4 字节，从中拿出长度和 compression bit
+diff --git a/43/kv/src/network/multiplex.rs b/43/kv/src/network/multiplex.rs
+index 07b347c..7a654e6 100644
+--- a/43/kv/src/network/multiplex.rs
++++ b/43/kv/src/network/multiplex.rs
+@@ -2,6 +2,7 @@ use futures::{future, Future, TryStreamExt};
+ use std::marker::PhantomData;
+ use tokio::io::{AsyncRead, AsyncWrite};
+ use tokio_util::compat::{Compat, FuturesAsyncReadCompatExt, TokioAsyncReadCompatExt};
++use tracing::instrument;
+ use yamux::{Config, Connection, ConnectionError, Control, Mode, WindowUpdateMode};
+
+ use crate::ProstClientStream;
+@@ -32,6 +33,7 @@ where
+         Self::new(stream, config, false, f)
+     }
+
++    #[instrument(name = "yamux_ctrl_new", skip_all)]
+     // 创建 YamuxCtrl
+     fn new<F, Fut>(stream: S, config: Option<Config>, is_client: bool, f: F) -> Self
+     where
+@@ -64,6 +66,7 @@ where
+         }
+     }
+
++    #[instrument(skip_all)]
+     /// 打开一个新的 stream
+     pub async fn open_stream(
+         &mut self,
+diff --git a/43/kv/src/network/tls.rs b/43/kv/src/network/tls.rs
+index 829d098..2cc1796 100644
+--- a/43/kv/src/network/tls.rs
++++ b/43/kv/src/network/tls.rs
+@@ -9,6 +9,7 @@ use tokio_rustls::TlsConnector;
+ use tokio_rustls::{
+     client::TlsStream as ClientTlsStream, server::TlsStream as ServerTlsStream, TlsAcceptor,
+ };
++use tracing::instrument;
+
+ use crate::KvError;
+
+@@ -30,8 +31,9 @@ pub struct TlsClientConnector {
+
+ impl TlsClientConnector {
+     /// 加载 client cert / CA cert，生成 ClientConfig
++    #[instrument(name = "tls_connector_new", skip_all)]
+     pub fn new(
+-        domain: impl Into<String>,
++        domain: impl Into<String> + std::fmt::Debug,
+         identity: Option<(&str, &str)>,
+         server_ca: Option<&str>,
+     ) -> Result<Self, KvError> {
+@@ -44,17 +46,17 @@ impl TlsClientConnector {
+             config.set_single_client_cert(certs, key)?;
+         }
+
+-        // 加载本地信任的根证书链
+-        config.root_store = match rustls_native_certs::load_native_certs() {
+-            Ok(store) | Err((Some(store), _)) => store,
+-            Err((None, error)) => return Err(error.into()),
+-        };
+-
+         // 如果有签署服务器的 CA 证书，则加载它，这样服务器证书不在根证书链
+         // 但是这个 CA 证书能验证它，也可以
+         if let Some(cert) = server_ca {
+             let mut buf = Cursor::new(cert);
+             config.root_store.add_pem_file(&mut buf).unwrap();
++        } else {
++            // 加载本地信任的根证书链
++            config.root_store = match rustls_native_certs::load_native_certs() {
++                Ok(store) | Err((Some(store), _)) => store,
++                Err((None, error)) => return Err(error.into()),
++            };
+         }
+
+         Ok(Self {
+@@ -63,6 +65,7 @@ impl TlsClientConnector {
+         })
+     }
+
++    #[instrument(name = "tls_client_connect", skip_all)]
+     /// 触发 TLS 协议，把底层的 stream 转换成 TLS stream
+     pub async fn connect<S>(&self, stream: S) -> Result<ClientTlsStream<S>, KvError>
+     where
+@@ -81,6 +84,7 @@ impl TlsClientConnector {
+
+ impl TlsServerAcceptor {
+     /// 加载 server cert / CA cert，生成 ServerConfig
++    #[instrument(name = "tls_acceptor_new", skip_all)]
+     pub fn new(cert: &str, key: &str, client_ca: Option<&str>) -> Result<Self, KvError> {
+         let certs = load_certs(cert)?;
+         let key = load_key(key)?;
+@@ -111,6 +115,7 @@ impl TlsServerAcceptor {
+         })
+     }
+
++    #[instrument(name = "tls_server_accept", skip_all)]
+     /// 触发 TLS 协议，把底层的 stream 转换成 TLS stream
+     pub async fn accept<S>(&self, stream: S) -> Result<ServerTlsStream<S>, KvError>
+     where
+diff --git a/43/kv/src/service/mod.rs b/43/kv/src/service/mod.rs
+index e39d9e9..7b249ce 100644
+--- a/43/kv/src/service/mod.rs
++++ b/43/kv/src/service/mod.rs
+@@ -3,7 +3,7 @@ use crate::{
+ };
+ use futures::stream;
+ use std::sync::Arc;
+-use tracing::debug;
++use tracing::{debug, instrument};
+
+ mod command_service;
+ mod topic;
+@@ -112,6 +112,7 @@ impl<Store: Storage> From<ServiceInner<Store>> for Service<Store> {
+ }
+
+ impl<Store: Storage> Service<Store> {
++    #[instrument(name = "service_execute", skip_all)]
+     pub fn execute(&self, cmd: CommandRequest) -> StreamingResponse {
+         debug!("Got request: {:?}", cmd);
+         self.inner.on_received.notify(&cmd);
+diff --git a/43/kv/src/service/topic.rs b/43/kv/src/service/topic.rs
+index 1a65320..068c185 100644
+--- a/43/kv/src/service/topic.rs
++++ b/43/kv/src/service/topic.rs
+@@ -4,7 +4,7 @@ use std::sync::{
+     Arc,
+ };
+ use tokio::sync::mpsc;
+-use tracing::{debug, info, warn};
++use tracing::{debug, info, instrument, warn};
+
+ use crate::{CommandResponse, KvError, Value};
+
+@@ -38,6 +38,7 @@ pub struct Broadcaster {
+ }
+
+ impl Topic for Arc<Broadcaster> {
++    #[instrument(name = "topic_subscribe", skip_all)]
+     fn subscribe(self, name: String) -> mpsc::Receiver<Arc<CommandResponse>> {
+         let id = {
+             let entry = self.topics.entry(name).or_default();
+@@ -68,6 +69,7 @@ impl Topic for Arc<Broadcaster> {
+         rx
+     }
+
++    #[instrument(name = "topic_unsubscribe", skip_all)]
+     fn unsubscribe(self, name: String, id: u32) -> Result<u32, KvError> {
+         match self.remove_subscription(name, id) {
+             Some(id) => Ok(id),
+@@ -75,6 +77,7 @@ impl Topic for Arc<Broadcaster> {
+         }
+     }
+
++    #[instrument(name = "topic_publish", skip_all)]
+     fn publish(self, name: String, value: Arc<CommandResponse>) {
+         tokio::spawn(async move {
+             let mut ids = vec![];

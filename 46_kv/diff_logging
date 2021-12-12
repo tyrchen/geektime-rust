@@ -1,0 +1,146 @@
+diff --git a/43/kv/benches/pubsub.rs b/43/kv/benches/pubsub.rs
+index c6abefd..72fbec9 100644
+--- a/43/kv/benches/pubsub.rs
++++ b/43/kv/benches/pubsub.rs
+@@ -85,7 +85,18 @@ fn pubsub(c: &mut Criterion) {
+         .enable_all()
+         .build()
+         .unwrap();
+-    let values = &["Hello", "Tyr", "Goodbye", "World"];
++
++    let base_str = include_str!("../fixtures/server.conf"); // 891 bytes
++
++    let values: &'static [&'static str] = Box::leak(
++        vec![
++            &base_str[..64],
++            &base_str[..128],
++            &base_str[..256],
++            &base_str[..512],
++        ]
++        .into_boxed_slice(),
++    );
+     let topic = "lobby";
+
+     // 运行服务器和 100 个 subscriber，为测试准备
+@@ -93,7 +104,7 @@ fn pubsub(c: &mut Criterion) {
+         eprint!("preparing server and subscribers");
+         start_server().await.unwrap();
+         time::sleep(Duration::from_millis(50)).await;
+-        for _ in 0..100 {
++        for _ in 0..1000 {
+             start_subscribers(topic).await.unwrap();
+             eprint!(".");
+         }
+diff --git a/43/kv/examples/gen_config.rs b/43/kv/examples/gen_config.rs
+index c275050..e4a0cb5 100644
+--- a/43/kv/examples/gen_config.rs
++++ b/43/kv/examples/gen_config.rs
+@@ -1,6 +1,7 @@
+ use anyhow::Result;
+ use kv6::{
+-    ClientConfig, ClientTlsConfig, GeneralConfig, ServerConfig, ServerTlsConfig, StorageConfig,
++    ClientConfig, ClientTlsConfig, GeneralConfig, LogConfig, RotationConfig, ServerConfig,
++    ServerTlsConfig, StorageConfig,
+ };
+ use std::fs;
+
+@@ -20,6 +21,10 @@ fn main() -> Result<()> {
+             key: SERVER_KEY.into(),
+             ca: None,
+         },
++        log: LogConfig {
++            path: "/tmp/kv-log".into(),
++            rotation: RotationConfig::Daily,
++        },
+     };
+
+     fs::write(
+diff --git a/43/kv/src/config.rs b/43/kv/src/config.rs
+index b98c9a8..9a1f7ec 100644
+--- a/43/kv/src/config.rs
++++ b/43/kv/src/config.rs
+@@ -7,6 +7,7 @@ pub struct ServerConfig {
+     pub general: GeneralConfig,
+     pub storage: StorageConfig,
+     pub tls: ServerTlsConfig,
++    pub log: LogConfig,
+ }
+
+ #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+@@ -20,6 +21,19 @@ pub struct GeneralConfig {
+     pub addr: String,
+ }
+
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
++pub struct LogConfig {
++    pub path: String,
++    pub rotation: RotationConfig,
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
++pub enum RotationConfig {
++    Hourly,
++    Daily,
++    Never,
++}
++
+ #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+ #[serde(tag = "type", content = "args")]
+ pub enum StorageConfig {
+diff --git a/43/kv/src/server.rs b/43/kv/src/server.rs
+index dc4ffd1..efe660c 100644
+--- a/43/kv/src/server.rs
++++ b/43/kv/src/server.rs
+@@ -1,10 +1,50 @@
++use std::env;
++
+ use anyhow::Result;
+-use kv6::{start_server_with_config, ServerConfig};
++use kv6::{start_server_with_config, RotationConfig, ServerConfig};
++use tokio::fs;
++use tracing::span;
++use tracing_subscriber::{
++    fmt::{self, format},
++    layer::SubscriberExt,
++    prelude::*,
++    EnvFilter,
++};
+
+ #[tokio::main]
+ async fn main() -> Result<()> {
+-    tracing_subscriber::fmt::init();
+-    let config: ServerConfig = toml::from_str(include_str!("../fixtures/server.conf"))?;
++    let config = match env::var("KV_SERVER_CONFIG") {
++        Ok(path) => fs::read_to_string(&path).await?,
++        Err(_) => include_str!("../fixtures/server.conf").to_string(),
++    };
++    let config: ServerConfig = toml::from_str(&config)?;
++
++    let tracer = opentelemetry_jaeger::new_pipeline()
++        .with_service_name("kv-server")
++        .install_simple()?;
++    let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
++
++    // 添加
++    let log = &config.log;
++    let file_appender = match log.rotation {
++        RotationConfig::Hourly => tracing_appender::rolling::hourly(&log.path, "server.log"),
++        RotationConfig::Daily => tracing_appender::rolling::daily(&log.path, "server.log"),
++        RotationConfig::Never => tracing_appender::rolling::never(&log.path, "server.log"),
++    };
++
++    let (non_blocking, _guard1) = tracing_appender::non_blocking(file_appender);
++    let fmt_layer = fmt::layer()
++        .event_format(format().compact())
++        .with_writer(non_blocking);
++
++    tracing_subscriber::registry()
++        .with(EnvFilter::from_default_env())
++        .with(fmt_layer)
++        .with(opentelemetry)
++        .init();
++
++    let root = span!(tracing::Level::INFO, "app_start", work_units = 2);
++    let _enter = root.enter();
+
+     start_server_with_config(&config).await?;
