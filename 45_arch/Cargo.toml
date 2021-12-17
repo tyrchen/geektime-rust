@@ -1,5 +1,5 @@
 [package]
-name = "rgrep"
+name = "arch"
 version = "0.1.0"
 edition = "2021"
 
@@ -7,10 +7,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1"
-clap = { version = "3.0.0-rc.5", features = ["derive"] }
-colored = "2"
-glob = "0.3"
-itertools = "0.10"
-rayon = "1"
-regex = "1"
+async-trait = "0.1"
 thiserror = "1"
+tokio = { version = "1", features = ["full"] }

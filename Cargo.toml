@@ -43,5 +43,7 @@ members = [
   "42_kv",
   "43_docdoc",
   "44_data_processing",
+  "45_arch",
   "46_kv",
+  "ending",
 ]
