@@ -70,7 +70,9 @@ impl UserDb {
 
 /// 重新创建 users 表
 async fn recreate_table(pool: &SqlitePool) -> Result<()> {
-    sqlx::query("DROP TABLE users").execute(pool).await?;
+    sqlx::query("DROP TABLE IF EXISTS users")
+        .execute(pool)
+        .await?;
     sqlx::query(
         r#"CREATE TABLE IF NOT EXISTS users(
                 id              INTEGER PRIMARY KEY NOT NULL,
