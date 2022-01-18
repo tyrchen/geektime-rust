@@ -1,0 +1,33 @@
+impl {{ name }} {
+    pub fn builder() -> {{ builder_name }} {
+        Default::default()
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct {{ builder_name }} {
+    {% for field in fields %}
+        {{ field.name }}: Option<{{ field.ty }}>,
+    {% endfor %}
+}
+
+impl {{ builder_name }} {
+    {% for field in fields %}
+    pub fn {{ field.name }}(mut self, v: impl Into<{{ field.ty }}>) -> {{ builder_name }} {
+        self.{{ field.name }} = Some(v.into());
+        self
+    }
+    {% endfor %}
+
+    pub fn build(self) -> Result<{{ name }}, &'static str> {
+        Ok({{ name }} {
+            {% for field in fields %}
+                {% if field.optional %}
+                {{ field.name }}: self.{{ field.name }},
+                {% else %}
+                {{ field.name }}: self.{{ field.name }}.ok_or("Build failed: missing {{ field.name }}")?,
+                {% endif %}
+            {% endfor %}
+        })
+    }
+}
