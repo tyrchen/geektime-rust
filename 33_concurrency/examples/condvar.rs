@@ -9,8 +9,13 @@ fn main() {
 
     thread::spawn(move || {
         let (lock, cvar) = &*pair2;
-        let mut started = lock.lock().unwrap();
-        *started = true;
+
+        // 通过离开作用域来释放锁，否则主线程会一直阻塞在获取锁上
+        {
+            let mut started = lock.lock().unwrap();
+            *started = true;
+        }
+
         eprintln!("I'm a happy worker!");
         // 通知主线程
         cvar.notify_one();
@@ -27,4 +32,7 @@ fn main() {
         started = cvar.wait(started).unwrap();
     }
     eprintln!("Worker started!");
+
+    // 等待 worker 线程
+    thread::sleep(Duration::from_secs(3600));
 }
