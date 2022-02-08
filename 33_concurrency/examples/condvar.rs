@@ -7,7 +7,7 @@ fn main() {
     let pair = Arc::new((Mutex::new(false), Condvar::new()));
     let pair2 = Arc::clone(&pair);
 
-    thread::spawn(move || {
+    let t1 = thread::spawn(move || {
         let (lock, cvar) = &*pair2;
 
         // 通过离开作用域来释放锁，否则主线程会一直阻塞在获取锁上
@@ -34,5 +34,5 @@ fn main() {
     eprintln!("Worker started!");
 
     // 等待 worker 线程
-    thread::sleep(Duration::from_secs(3600));
+    t1.join().unwrap();
 }
