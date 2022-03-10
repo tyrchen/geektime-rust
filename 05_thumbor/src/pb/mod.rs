@@ -34,9 +34,9 @@ impl filter::Filter {
     pub fn to_str(self) -> Option<&'static str> {
         match self {
             filter::Filter::Unspecified => None,
-            filter::Filter::Oceanic => Some("oceanic"),
-            filter::Filter::Islands => Some("islands"),
-            filter::Filter::Marine => Some("marine"),
+            filter::Filter::Oceanic     => Some("oceanic"),
+            filter::Filter::Islands     => Some("islands"),
+            filter::Filter::Marine      => Some("marine"),
         }
     }
 }
@@ -45,12 +45,12 @@ impl filter::Filter {
 impl From<resize::SampleFilter> for SamplingFilter {
     fn from(v: resize::SampleFilter) -> Self {
         match v {
-            resize::SampleFilter::Undefined => SamplingFilter::Undefined,
-            resize::SampleFilter::Nearest => SamplingFilter::Nearest,
-            resize::SampleFilter::Triangle => SamplingFilter::Triangle,
-            resize::SampleFilter::CatmullRom => SamplingFilter::CatmullRom,
-            resize::SampleFilter::Gaussian => SamplingFilter::Gaussian,
-            resize::SampleFilter::Lanczos3 => SamplingFilter::Lanczos3,
+            resize::SampleFilter::Undefined     => SamplingFilter::Undefined,
+            resize::SampleFilter::Nearest       => SamplingFilter::Nearest,
+            resize::SampleFilter::Triangle      => SamplingFilter::Triangle,
+            resize::SampleFilter::CatmullRom    => SamplingFilter::CatmullRom,
+            resize::SampleFilter::Gaussian      => SamplingFilter::Gaussian,
+            resize::SampleFilter::Lanczos3      => SamplingFilter::Lanczos3,
         }
     }
 }
