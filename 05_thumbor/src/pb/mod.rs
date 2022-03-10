@@ -45,7 +45,7 @@ impl filter::Filter {
 impl From<resize::SampleFilter> for SamplingFilter {
     fn from(v: resize::SampleFilter) -> Self {
         match v {
-            resize::SampleFilter::Undefined => SamplingFilter::Nearest,
+            resize::SampleFilter::Undefined => SamplingFilter::Undefined,
             resize::SampleFilter::Nearest => SamplingFilter::Nearest,
             resize::SampleFilter::Triangle => SamplingFilter::Triangle,
             resize::SampleFilter::CatmullRom => SamplingFilter::CatmullRom,
