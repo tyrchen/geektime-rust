@@ -77,7 +77,7 @@ pub fn default_strategy(
         .join("\n");
 
     if !matches.is_empty() {
-        writer.write_all(path.display().to_string().green().as_bytes())?;
+        writer.write_all(format!("{}", path.display().to_string().green()).as_bytes())?;
         writer.write_all(b"\n")?;
         writer.write_all(matches.as_bytes())?;
         writer.write_all(b"\n")?;
