@@ -5,6 +5,7 @@ use mime::Mime;
 use reqwest::{header, Client, Response, Url};
 use std::{collections::HashMap, str::FromStr};
 use syntect::{
+    Error,
     easy::HighlightLines,
     highlighting::{Style, ThemeSet},
     parsing::SyntaxSet,
@@ -179,8 +180,8 @@ fn print_syntect(s: &str, ext: &str) {
     let syntax = ps.find_syntax_by_extension(ext).unwrap();
     let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
     for line in LinesWithEndings::from(s) {
-        let ranges: Vec<(Style, &str)> = h.highlight(line, &ps);
-        let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
+        let ranges: Result<Vec<(Style, &str)>, Error> = h.highlight_line(line, &ps);
+        let escaped = as_24_bit_terminal_escaped(&ranges.unwrap()[..], true);
         print!("{}", escaped);
     }
 }
